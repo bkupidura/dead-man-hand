@@ -16,10 +16,10 @@ import (
 )
 
 var (
-	processMessagesInterval     = 60
-	processMessagesIntervalUnit = time.Second
-	aliveIntervalUnit           = time.Minute
-	processAfterIntervalUnit    = time.Minute
+	processMessagesInterval     = 30
+	processMessagesIntervalUnit = time.Minute
+	aliveIntervalUnit           = time.Hour
+	processAfterIntervalUnit    = time.Hour
 )
 
 func main() {

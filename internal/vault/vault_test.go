@@ -293,8 +293,7 @@ func TestGetSecret(t *testing.T) {
 		{
 			inputVault: func() *Vault {
 				now := time.Now()
-				// change to hours
-				nowMinus9 := now.Add(-9 * time.Minute)
+				nowMinus9 := now.Add(-9 * time.Hour)
 				v := &Vault{
 					data: map[string]*VaultData{
 						"testClientUUID": {
@@ -401,8 +400,7 @@ func TestGetSecret(t *testing.T) {
 		{
 			inputVault: func() *Vault {
 				now := time.Now()
-				// change to hours
-				nowMinus11 := now.Add(-11 * time.Minute)
+				nowMinus11 := now.Add(-11 * time.Hour)
 				v := &Vault{
 					data: map[string]*VaultData{
 						"testClientUUID": {
@@ -797,8 +795,7 @@ func TestDeleteSecret(t *testing.T) {
 		{
 			inputVault: func() *Vault {
 				now := time.Now()
-				// change to hours
-				nowMinus9 := now.Add(-9 * time.Minute)
+				nowMinus9 := now.Add(-9 * time.Hour)
 				v := &Vault{
 					savePath: "test_vault.json",
 					data: map[string]*VaultData{
@@ -845,8 +842,7 @@ func TestDeleteSecret(t *testing.T) {
 		{
 			inputVault: func() *Vault {
 				now := time.Now()
-				// change to hours
-				nowMinus11 := now.Add(-11 * time.Minute)
+				nowMinus11 := now.Add(-11 * time.Hour)
 				v := &Vault{
 					savePath: "test_vault.json",
 					data: map[string]*VaultData{
@@ -888,8 +884,7 @@ func TestDeleteSecret(t *testing.T) {
 		{
 			inputVault: func() *Vault {
 				now := time.Now()
-				// change to hours
-				nowMinus11 := now.Add(-11 * time.Minute)
+				nowMinus11 := now.Add(-11 * time.Hour)
 				v := &Vault{
 					savePath: "test_vault.json",
 					data: map[string]*VaultData{

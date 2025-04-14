@@ -26,6 +26,8 @@ func TestDMH(t *testing.T) {
 
 	processMessagesInterval = 1
 	aliveIntervalUnit = time.Second
+	processAfterIntervalUnit = time.Second
+	processMessagesIntervalUnit = time.Second
 
 	f, err := os.Create(stateFile)
 	defer os.Remove(stateFile)

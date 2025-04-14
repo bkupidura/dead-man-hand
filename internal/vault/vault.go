@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	secretReleaseIntervalUnit = time.Minute
+	secretReleaseIntervalUnit = time.Hour
 	// mocks for tests
 	osCreate = os.Create
 	cryptNew = crypt.New
