@@ -12,8 +12,8 @@
 *.out
 
 dmh
-dmh-cli
-cmd
+cmd/dmh-cli
+cmd/cmd
 config.yaml
 state.json
 vault.json
