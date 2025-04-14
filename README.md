@@ -5,7 +5,14 @@ Dead-Man-Hand will execute pre-configured actions when you will no longer be "av
 
 **All actions are encrypted and when properly configured nobody will be able to get access to them.**
 
-Main goal of DMH is to ensure that actions can be executed only when you are dead. And before that time, every action should be confidential - even for people who have access to DMH.
+Main goal of `DMH` is to ensure that actions can be executed only when you are dead. And before that time, every action should be confidential - even for people who have access to `DMH`.
+
+# Features
+- Privacy focused - even with access to `DMH` you will not be able to read actions.
+- Tested - almost 100% code covered by unit tests and integration tests.
+- Small footprint
+- Multiple action execution methods (`json_post`, `bulksms`, `mail`)
+- Multiple alive probe methods (`json_post`, `bulksms`, `mail`)
 
 # How it works
 <img width="1023" alt="dmh-flow" src="https://github.com/user-attachments/assets/63a5a1a9-c692-4ade-a971-073b807653fe" />
@@ -23,7 +30,7 @@ Main goal of DMH is to ensure that actions can be executed only when you are dea
 
 **To decrypt action, access to `DMH` and `Vault` is required - `DMH` stores encrypted data and `Vault` stores encryption key.**
 
-**To provide best possible privacy, its required to run `DMH` and `Vault` on different systems/servers/locations.**
+**To provide best possible privacy/security, its required to run `DMH` and `Vault` on different systems/servers/locations.**
 
 ## DMH
 `DMH` is main component which implements whole logic.
@@ -64,7 +71,7 @@ Only `released` secrets can be fetched/deleted.
 
 ### API
 ```
-/api/vault/alive/{clientUUID} - updates `Vault` `LastSeen` for a client (dmh instance)
+/api/vault/alive/{clientUUID} - updates `Vault` `LastSeen` for a client (`DMH` instance)
 /api/vault/store/{clientUUID}/{secretUUID} - create, get, delete vault secret
 ```
 
