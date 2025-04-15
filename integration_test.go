@@ -25,9 +25,12 @@ func TestDMH(t *testing.T) {
 	requiredEnvs := map[string]string{"DMH_CONFIG_FILE": configFile}
 
 	processMessagesInterval = 1
-	aliveIntervalUnit = time.Second
-	processAfterIntervalUnit = time.Second
+	aliveProbeInterval = 1
+	aliveProbeIntervalUnit = time.Second
+	aliveSinceLastSeenUnit = time.Second
+	aliveMinIntervalUnit = time.Second
 	processMessagesIntervalUnit = time.Second
+	processAfterIntervalUnit = time.Second
 
 	f, err := os.Create(stateFile)
 	defer os.Remove(stateFile)
@@ -60,7 +63,8 @@ func TestDMH(t *testing.T) {
       url: http://127.0.0.1:8080
       client_uuid: %s
     alive:
-      - every: 2
+      - min_interval: 1
+        since_last_seen: 1
         kind: json_post
         data:
           url: http://127.0.0.1:9090/alive
@@ -78,10 +82,17 @@ func TestDMH(t *testing.T) {
 		require.Nil(t, err)
 	}
 
+	hitEndpoint := map[string]bool{
+		"/alive":       false,
+		"/test":        false,
+		"/action/test": false,
+	}
 	// Lets start fake server which can be used by Actions.
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		require.Nil(t, err)
+
+		hitEndpoint[r.URL.RequestURI()] = true
 
 		if r.URL.RequestURI() == "/alive" {
 			require.Equal(t, `{"field1":"alive-test"}`, string(body))
@@ -261,4 +272,10 @@ func TestDMH(t *testing.T) {
 	require.Nil(t, err)
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusNotFound, resp.StatusCode)
+
+	// Lets ensure that all fakeServer endpoints were visited
+	require.Equal(t, 3, len(hitEndpoint))
+	for k, v := range hitEndpoint {
+		require.True(t, v, fmt.Sprintf("%s endpoint was not visited", k))
+	}
 }

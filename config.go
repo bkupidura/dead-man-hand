@@ -18,9 +18,10 @@ type aliveConfig struct {
 }
 
 type aliveItem struct {
-	Every int                    `koanf:"every"`
-	Kind  string                 `koanf:"kind"`
-	Data  map[string]interface{} `koanf:"data"`
+	MinInterval   int                    `koanf:"min_interval"`
+	SinceLastSeen int                    `koanf:"since_last_seen"`
+	Kind          string                 `koanf:"kind"`
+	Data          map[string]interface{} `koanf:"data"`
 }
 
 // readConfig reads configFile and feeds it to koanf.

@@ -378,7 +378,8 @@ func TestGetAliveConfig(t *testing.T) {
 			koanfFunc: func() *koanf.Koanf {
 				b := []byte(`
                                 alive:
-                                  - every: 1
+                                  - since_last_seen: 10
+                                    min_interval: 2
                                     kind: bulksms
                                     data: 10
                                 `)
@@ -393,7 +394,8 @@ func TestGetAliveConfig(t *testing.T) {
 			koanfFunc: func() *koanf.Koanf {
 				b := []byte(`
                                 alive:
-                                  - every: 1
+                                  - since_last_seen: 10
+                                    min_interval: 2
                                     kind: bulksms
                                     data:
                                       message: test
@@ -407,8 +409,9 @@ func TestGetAliveConfig(t *testing.T) {
 			expectedConfig: aliveConfig{
 				Alive: []aliveItem{
 					{
-						Every: 1,
-						Kind:  "bulksms",
+						SinceLastSeen: 10,
+						MinInterval:   2,
+						Kind:          "bulksms",
 						Data: map[string]interface{}{
 							"message":     "test",
 							"destination": []interface{}{"1111"},

@@ -17,8 +17,11 @@ import (
 
 var (
 	processMessagesInterval     = 15
+	aliveProbeInterval          = 15
+	aliveProbeIntervalUnit      = time.Minute
+	aliveSinceLastSeenUnit      = time.Hour
+	aliveMinIntervalUnit        = time.Hour
 	processMessagesIntervalUnit = time.Minute
-	aliveIntervalUnit           = time.Hour
 	processAfterIntervalUnit    = time.Hour
 )
 
@@ -95,25 +98,34 @@ func main() {
 
 func dispatcher(s state.StateInterface, e execute.ExecuteInterface, a aliveConfig) {
 	for _, alive := range a.Alive {
-		ticker := time.NewTicker(time.Duration(alive.Every) * aliveIntervalUnit)
-		go func(ticker *time.Ticker, item aliveItem, e execute.ExecuteInterface) {
+		ticker := time.NewTicker(time.Duration(aliveProbeInterval) * aliveProbeIntervalUnit)
+		go func(ticker *time.Ticker, item aliveItem, e execute.ExecuteInterface, s state.StateInterface) {
 			aliveData, err := json.Marshal(item.Data)
 			if err != nil {
 				log.Printf("unable to parse alive config %v: %s, skipping...", item, err)
 				return
 			}
+			var lastRun time.Time
 			for {
 				select {
 				case <-ticker.C:
-					if err := e.Run(&state.Action{
-						Kind: item.Kind,
-						Data: string(aliveData),
-					}); err != nil {
-						log.Printf("unable to run alive probe: %s", err)
+					now := time.Now()
+					// Execute only when now - LastSeen > alive.SinceLastSeen * aliveSinceLastSeenUnit
+					if now.Sub(s.GetLastSeen()) > time.Duration(item.SinceLastSeen)*aliveSinceLastSeenUnit {
+						// Execute only when now - lastRun > alive.MinInterval * aliveMinIntervalUnit
+						if now.Sub(lastRun) > time.Duration(item.MinInterval)*aliveMinIntervalUnit {
+							lastRun = now
+							if err := e.Run(&state.Action{
+								Kind: item.Kind,
+								Data: string(aliveData),
+							}); err != nil {
+								log.Printf("unable to run alive probe: %s", err)
+							}
+						}
 					}
 				}
 			}
-		}(ticker, alive, e)
+		}(ticker, alive, e, s)
 	}
 
 	processMessagesTicker := time.NewTicker(time.Duration(processMessagesInterval) * processMessagesIntervalUnit)

@@ -187,14 +187,16 @@ state:
   file: state.json # where to save dmh data
 # each alive probe can use any of execute plugins
 alive:
-  - every: 24 # execute this probe every 24 hours
+  - since_last_seen: 23 # execute this probe after 23 hours from `LastSeen`
+    min_interval: 12 # dont execute this probe more offten than every 12 hours
     kind: mail
     data:
       message: Are you still alive? Please confirm by clicking https://dmh-domain:8080/api/alive
       subject: Still ok?
       destinaton:
         - owner@domain.com
-  - every: 36 # execute this probe every 36 hours
+  - since_last_seen: 36 # execute this probe after 36 hours from `LastSeen`
+    min_interval: 24 # dont execute this probe more offten than every 24 hours
     kind: bulksms
     data:
       message: Are you ok? Please click https://dmh-domain:8080/api/alive
