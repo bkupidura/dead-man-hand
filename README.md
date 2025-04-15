@@ -63,7 +63,7 @@ It is responsible for:
 
 To ensure private keys can be fetched only when user is considered dead, `Vault` have own `LastSeen` information and its not depending on `DMH` `LastSeen`.
 
-`Vault` can be also hosted as AWS Lambda (TBD).
+`Vault` can be also hosted as [AWS Lambda](https://github.com/bkupidura/dead-man-hand/blob/main/examples/aws-lambda-vault/Readme.md).
 
 Vault will `release` secret when user was `LastSeen` `ProcessAfter` number of hours ago. Each action have unique secret, each secret can have different `ProcessAfter`.
 
@@ -74,6 +74,19 @@ Only `released` secrets can be fetched/deleted.
 /api/vault/alive/{clientUUID} - updates `Vault` `LastSeen` for a client (`DMH` instance)
 /api/vault/store/{clientUUID}/{secretUUID} - create, get, delete vault secret
 ```
+
+# Installation
+
+## Docker (recommendated)
+```
+docker run --name dead-man-hand -e DMH_CONFIG_FILE=/data/config.yaml -v /srv/dead-man-hand/data:/data -p 8080:8080 ghcr.io/bkupidura/dead-man-hand:latest
+```
+
+## Baremetal
+1. Install `golang`
+2. Clone repo: `git clone https://github.com/bkupidura/dead-man-hand.git`
+3. Build binaries: `cd dead-man-hand && make build`
+4. Run dmh: `DMH_CONFIG_FILE=config.yaml ./dmh`
 
 # Execute plugins
 
@@ -160,7 +173,7 @@ execute:
   ]
 }
 ```
-# Config
+# Configuration
 ```
 # running vault and dmh together is not recomendated, please use this only for tests.
 components:
@@ -251,7 +264,7 @@ Action deleted successfully
 ### test
 Perform action test. 
 
-**THIS IS RECOMENDATED BEFORE USING `action add`, TO CONFIRM THAT PROVIDED `data` is OK.**
+**THIS IS RECOMENDATED BEFORE USING `action add`, TO CONFIRM THAT PROVIDED `data` is valid.**
 ```
 % dmh-cli action test --kind dummy --data '{"message": "test"}'
 Action tested successfully

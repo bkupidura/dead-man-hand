@@ -16,7 +16,7 @@ import (
 )
 
 var (
-	processMessagesInterval     = 30
+	processMessagesInterval     = 15
 	processMessagesIntervalUnit = time.Minute
 	aliveIntervalUnit           = time.Hour
 	processAfterIntervalUnit    = time.Hour
