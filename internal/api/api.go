@@ -27,8 +27,8 @@ func (e *ErrResponse) Render(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// ErrInvalidRequests returns BadRequest.
-func ErrInvalidRequest(err error) render.Renderer {
+// StatusErrInvalidRequests returns BadRequest.
+func StatusErrInvalidRequest(err error) render.Renderer {
 	return &ErrResponse{
 		Err:            err,
 		HTTPStatusCode: http.StatusBadRequest,
@@ -37,8 +37,8 @@ func ErrInvalidRequest(err error) render.Renderer {
 	}
 }
 
-// ErrInternal returns InternalServerError.
-func ErrInternal(err error) render.Renderer {
+// StatusErrInternal returns InternalServerError.
+func StatusErrInternal(err error) render.Renderer {
 	return &ErrResponse{
 		Err:            err,
 		HTTPStatusCode: http.StatusInternalServerError,
@@ -46,29 +46,38 @@ func ErrInternal(err error) render.Renderer {
 	}
 }
 
-// ErrNotFound returns NotFound.
-func ErrNotFound(err error) render.Renderer {
+// StatusErrNotFound returns NotFound.
+func StatusErrNotFound(err error) render.Renderer {
 	return &ErrResponse{
 		HTTPStatusCode: http.StatusNotFound,
 		StatusText:     "Resource not found.",
 	}
 }
 
-// OkResponse is generic ok code struct.
-type OkResponse struct {
-	HTTPStatusCode int `json:"-"`
+// OKResponse is generic ok code struct.
+type OKResponse struct {
+	HTTPStatusCode int    `json:"-"`
+	StatusText     string `json:"status"`
 }
 
 // Render returns rendered ok response.
-func (o *OkResponse) Render(w http.ResponseWriter, r *http.Request) error {
+func (o *OKResponse) Render(w http.ResponseWriter, r *http.Request) error {
 	render.Status(r, o.HTTPStatusCode)
 	return nil
+}
+
+// StatusOK returns success http status.
+func StatusOK(httpStatus int) render.Renderer {
+	return &OKResponse{
+		HTTPStatusCode: httpStatus,
+		StatusText:     "success",
+	}
 }
 
 // healthHandler is used by /ready and /healthz endpoints.
 func healthHandler() func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		render.Render(w, r, &OkResponse{HTTPStatusCode: http.StatusOK})
+		render.Render(w, r, StatusOK(http.StatusOK))
 	}
 }
 
@@ -80,16 +89,16 @@ func aliveHandler(s state.StateInterface, vaultURL string, vaultClientUUID strin
 
 		resp, err := http.Get(fmt.Sprintf("%s/api/vault/alive/%s", vaultURL, vaultClientUUID))
 		if err != nil {
-			render.Render(w, r, ErrInternal(nil))
+			render.Render(w, r, StatusErrInternal(nil))
 			return
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
-			render.Render(w, r, ErrInternal(nil))
+			render.Render(w, r, StatusErrInternal(nil))
 			return
 		}
 
-		render.Render(w, r, &OkResponse{HTTPStatusCode: http.StatusOK})
+		render.Render(w, r, StatusOK(http.StatusOK))
 	}
 }
 
@@ -98,11 +107,11 @@ func vaultAliveHandler(v vault.VaultInterface) func(http.ResponseWriter, *http.R
 	return func(w http.ResponseWriter, r *http.Request) {
 		paramClientUUID := chi.URLParam(r, "clientUUID")
 		if paramClientUUID == "" {
-			render.Render(w, r, ErrNotFound(nil))
+			render.Render(w, r, StatusErrNotFound(nil))
 			return
 		}
 		v.UpdateLastSeen(paramClientUUID)
-		render.Render(w, r, &OkResponse{HTTPStatusCode: http.StatusOK})
+		render.Render(w, r, StatusOK(http.StatusOK))
 	}
 }
 
@@ -111,7 +120,7 @@ func testActionHandler(e execute.ExecuteInterface) func(http.ResponseWriter, *ht
 	return func(w http.ResponseWriter, r *http.Request) {
 		request := &addTestActionRequest{}
 		if err := render.Bind(r, request); err != nil {
-			render.Render(w, r, ErrInvalidRequest(err))
+			render.Render(w, r, StatusErrInvalidRequest(err))
 			return
 		}
 
@@ -121,11 +130,11 @@ func testActionHandler(e execute.ExecuteInterface) func(http.ResponseWriter, *ht
 			ProcessAfter: request.ProcessAfter,
 		}
 		if err := e.Run(a); err != nil {
-			render.Render(w, r, ErrInvalidRequest(err))
+			render.Render(w, r, StatusErrInvalidRequest(err))
 			return
 		}
 
-		render.Render(w, r, &OkResponse{HTTPStatusCode: http.StatusOK})
+		render.Render(w, r, StatusOK(http.StatusOK))
 	}
 }
 
@@ -167,7 +176,7 @@ func addActionHandler(s state.StateInterface) func(http.ResponseWriter, *http.Re
 	return func(w http.ResponseWriter, r *http.Request) {
 		request := &addTestActionRequest{}
 		if err := render.Bind(r, request); err != nil {
-			render.Render(w, r, ErrInvalidRequest(err))
+			render.Render(w, r, StatusErrInvalidRequest(err))
 			return
 		}
 
@@ -179,11 +188,11 @@ func addActionHandler(s state.StateInterface) func(http.ResponseWriter, *http.Re
 		}
 
 		if err := s.AddAction(a); err != nil {
-			render.Render(w, r, ErrInternal(nil))
+			render.Render(w, r, StatusErrInternal(nil))
 			return
 		}
 
-		render.Render(w, r, &OkResponse{HTTPStatusCode: http.StatusCreated})
+		render.Render(w, r, StatusOK(http.StatusCreated))
 	}
 }
 
@@ -212,13 +221,13 @@ func addVaultSecretHandler(v vault.VaultInterface) func(http.ResponseWriter, *ht
 		paramSecretUUID := chi.URLParam(r, "secretUUID")
 
 		if paramClientUUID == "" || paramSecretUUID == "" {
-			render.Render(w, r, ErrInvalidRequest(fmt.Errorf("provide valid clientUUID or secretUUID")))
+			render.Render(w, r, StatusErrInvalidRequest(fmt.Errorf("provide valid clientUUID or secretUUID")))
 			return
 		}
 
 		request := &addVaultSecretRequest{}
 		if err := render.Bind(r, request); err != nil {
-			render.Render(w, r, ErrInvalidRequest(err))
+			render.Render(w, r, StatusErrInvalidRequest(err))
 			return
 		}
 
@@ -229,11 +238,11 @@ func addVaultSecretHandler(v vault.VaultInterface) func(http.ResponseWriter, *ht
 
 		if err := v.AddSecret(paramClientUUID, paramSecretUUID, secret); err != nil {
 			log.Printf("unable to add secret: %s", err)
-			render.Render(w, r, ErrInvalidRequest(fmt.Errorf("unable to add secret")))
+			render.Render(w, r, StatusErrInvalidRequest(fmt.Errorf("unable to add secret")))
 			return
 		}
 
-		render.Render(w, r, &OkResponse{HTTPStatusCode: http.StatusCreated})
+		render.Render(w, r, StatusOK(http.StatusCreated))
 	}
 }
 
@@ -246,7 +255,7 @@ func getActionHandler(s state.StateInterface) func(http.ResponseWriter, *http.Re
 			render.JSON(w, r, a)
 			return
 		}
-		render.Render(w, r, ErrNotFound(nil))
+		render.Render(w, r, StatusErrNotFound(nil))
 	}
 }
 
@@ -258,7 +267,7 @@ func getVaultSecretHandler(v vault.VaultInterface) func(http.ResponseWriter, *ht
 		s, err := v.GetSecret(paramClientUUID, paramSecretUUID)
 		if err != nil {
 			log.Printf("unable to return vault secret: %s", err)
-			render.Render(w, r, ErrNotFound(nil))
+			render.Render(w, r, StatusErrNotFound(nil))
 			return
 		}
 		render.JSON(w, r, s)
@@ -271,10 +280,10 @@ func deleteActionHandler(s state.StateInterface) func(http.ResponseWriter, *http
 		paramActionUUID := chi.URLParam(r, "actionUUID")
 		err := s.DeleteAction(paramActionUUID)
 		if err != nil {
-			render.Render(w, r, ErrNotFound(nil))
+			render.Render(w, r, StatusErrNotFound(nil))
 			return
 		}
-		render.Render(w, r, &OkResponse{HTTPStatusCode: http.StatusOK})
+		render.Render(w, r, StatusOK(http.StatusOK))
 	}
 }
 
@@ -287,9 +296,9 @@ func deleteVaultSecretHandler(v vault.VaultInterface) func(http.ResponseWriter, 
 		err := v.DeleteSecret(paramClientUUID, paramSecretUUID)
 		if err != nil {
 			log.Printf("unable to delete secret: %s", err)
-			render.Render(w, r, ErrNotFound(nil))
+			render.Render(w, r, StatusErrNotFound(nil))
 			return
 		}
-		render.Render(w, r, &OkResponse{HTTPStatusCode: http.StatusOK})
+		render.Render(w, r, StatusOK(http.StatusOK))
 	}
 }
