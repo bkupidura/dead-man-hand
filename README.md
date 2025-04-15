@@ -1,14 +1,14 @@
 ![dead-man-hand-logo](https://github.com/user-attachments/assets/0a0e041a-e76b-471a-9b05-14288a7325cb)
 
 # Idea
-Dead-Man-Hand will execute pre-configured actions when you will no longer be "available".
+Dead-Man-Hand will execute pre-added actions when you will no longer be "available".
 
-**All actions are encrypted and when properly configured nobody will be able to get access to them.**
+**All actions are encrypted and when properly configured nobody will be able to get action details till you are alive.**
 
 Main goal of `DMH` is to ensure that actions can be executed only when you are dead. And before that time, every action should be confidential - even for people who have access to `DMH`.
 
 # Features
-- Privacy focused - even with access to `DMH` you will not be able to read actions.
+- Privacy focused - even with access to `DMH` you will not be able to see action details.
 - Tested - almost 100% code covered by unit tests and integration tests.
 - Small footprint
 - Multiple action execution methods (`json_post`, `bulksms`, `mail`)
@@ -20,12 +20,12 @@ Main goal of `DMH` is to ensure that actions can be executed only when you are d
 1. User creates action
 2. DMH encrypt action with [age](https://github.com/FiloSottile/age)
 3. DMH uploads encryption private key to Vault
-4. Vault encrypts private key with own key and saves it (Vault will `release` private key when user will be considered dead)
-5. DMH saves encrypted action, discards plaintext action, discards private key (**from now, nobody is able to read unencrypted action, even DMH**)
+4. Vault encrypts private key with own key and saves it (Vault will `release` encryption private key when user will be considered dead)
+5. DMH saves encrypted action, discards plaintext action, discards private key (**from now, nobody is able to see unencrypted action, even DMH**)
 6. DMH will sent alive probes to user
 7. When user will ignore N probes (configured per action), she/he would be considered dead.
-8. When both DMH and Vault will decide that user is dead, Vault secrets will be released and actions would be decrypted and executed.
-9. After execution, DMH will remove private key from Vault - to ensure that action will remain confidential
+8. When both DMH and Vault will decide that user is dead, Vault secrets will be released, actions would be decrypted and executed.
+9. After execution, DMH will remove encryption private key from Vault - to ensure that action will remain confidential
 
 
 **To decrypt action, access to `DMH` and `Vault` is required - `DMH` stores encrypted data and `Vault` stores encryption key.**
@@ -249,7 +249,9 @@ Delete action from `DMH`
 Action deleted successfully
 ```
 ### test
-Perform action test. **THIS IS RECOMENDATED BEFORE USING `action add`, TO CONFIRM THAT PROVIDED `data` is OK.**
+Perform action test. 
+
+**THIS IS RECOMENDATED BEFORE USING `action add`, TO CONFIRM THAT PROVIDED `data` is OK.**
 ```
 % dmh-cli action test --kind dummy --data '{"message": "test"}'
 Action tested successfully
