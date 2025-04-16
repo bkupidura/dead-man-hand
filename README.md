@@ -10,7 +10,7 @@ Main goal of `DMH` is to ensure that actions can be executed only when you are d
 # Features
 - Privacy focused - even with access to `DMH` you will not be able to see action details.
 - Tested - almost 100% code covered by unit tests and integration tests.
-- Small footprint
+- Small footprint (less than 20MB of RAM needed)
 - Multiple action execution methods (`json_post`, `bulksms`, `mail`)
 - Multiple alive probe methods (`json_post`, `bulksms`, `mail`)
 
@@ -31,6 +31,19 @@ Main goal of `DMH` is to ensure that actions can be executed only when you are d
 **To decrypt action, access to `DMH` and `Vault` is required - `DMH` stores encrypted data and `Vault` stores encryption key.**
 
 **To provide best possible privacy/security, its required to run `DMH` and `Vault` on different systems/servers/locations.**
+
+## Action
+Action is *something* which will be executed after your are dead.
+
+### Payload
+```
+{
+  "kind": "bulksms",
+  "process_after": 10,
+  "commment": "comment",
+  "data": "{\"message\": \"some message\", \"destination\": [\"+481234567\"]}"
+}
+```
 
 ## DMH
 `DMH` is main component which implements whole logic.
