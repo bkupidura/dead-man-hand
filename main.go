@@ -11,6 +11,7 @@ import (
 
 	"dmh/internal/api"
 	"dmh/internal/execute"
+	"dmh/internal/metric"
 	"dmh/internal/state"
 	"dmh/internal/vault"
 )
@@ -82,6 +83,8 @@ func main() {
 			log.Panicf("unable to create vault: %s", err)
 		}
 	}
+
+	metric.Initialize(&metric.Options{State: s})
 
 	httpRouter := api.NewRouter(&api.Options{
 		State:           s,
