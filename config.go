@@ -18,10 +18,10 @@ type aliveConfig struct {
 }
 
 type aliveItem struct {
-	MinInterval   int                    `koanf:"min_interval"`
-	SinceLastSeen int                    `koanf:"since_last_seen"`
-	Kind          string                 `koanf:"kind"`
-	Data          map[string]interface{} `koanf:"data"`
+	MinInterval  int                    `koanf:"min_interval"`
+	ProcessAfter int                    `koanf:"process_after"`
+	Kind         string                 `koanf:"kind"`
+	Data         map[string]interface{} `koanf:"data"`
 }
 
 // readConfig reads configFile and feeds it to koanf.
@@ -78,6 +78,14 @@ func getAliveConfig(k *koanf.Koanf) aliveConfig {
 	var config aliveConfig
 	if err := k.Unmarshal("", &config); err != nil {
 		log.Panicf("unable to unmarshal config: %s", err)
+	}
+	for _, alive := range config.Alive {
+		if alive.ProcessAfter <= 0 {
+			log.Panicf("alive process_after should be greater than 0")
+		}
+		if alive.MinInterval < 0 {
+			log.Panicf("alive min_interval should be greater or equal 0")
+		}
 	}
 	return config
 }

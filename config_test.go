@@ -378,7 +378,7 @@ func TestGetAliveConfig(t *testing.T) {
 			koanfFunc: func() *koanf.Koanf {
 				b := []byte(`
                                 alive:
-                                  - since_last_seen: 10
+                                  - process_after: 10
                                     min_interval: 2
                                     kind: bulksms
                                     data: 10
@@ -394,7 +394,73 @@ func TestGetAliveConfig(t *testing.T) {
 			koanfFunc: func() *koanf.Koanf {
 				b := []byte(`
                                 alive:
-                                  - since_last_seen: 10
+                                  - process_after: 0
+                                    min_interval: 2
+                                    kind: bulksms
+                                    data:
+                                      message: test
+                                      destination: ["1111"]
+                                `)
+				k := koanf.New(".")
+				err := k.Load(rawbytes.Provider(b), yaml.Parser())
+				require.Nil(t, err)
+				return k
+			},
+			shouldPanic: true,
+		},
+		{
+			koanfFunc: func() *koanf.Koanf {
+				b := []byte(`
+                                alive:
+                                  - process_after: 1
+                                    min_interval: -1
+                                    kind: bulksms
+                                    data:
+                                      message: test
+                                      destination: ["1111"]
+                                `)
+				k := koanf.New(".")
+				err := k.Load(rawbytes.Provider(b), yaml.Parser())
+				require.Nil(t, err)
+				return k
+			},
+			shouldPanic: true,
+		},
+		{
+			koanfFunc: func() *koanf.Koanf {
+				b := []byte(`
+                                alive:
+                                  - process_after: 10
+                                    min_interval: 0
+                                    kind: bulksms
+                                    data:
+                                      message: test
+                                      destination: ["1111"]
+                                `)
+				k := koanf.New(".")
+				err := k.Load(rawbytes.Provider(b), yaml.Parser())
+				require.Nil(t, err)
+				return k
+			},
+			expectedConfig: aliveConfig{
+				Alive: []aliveItem{
+					{
+						ProcessAfter: 10,
+						MinInterval:  0,
+						Kind:         "bulksms",
+						Data: map[string]interface{}{
+							"message":     "test",
+							"destination": []interface{}{"1111"},
+						},
+					},
+				},
+			},
+		},
+		{
+			koanfFunc: func() *koanf.Koanf {
+				b := []byte(`
+                                alive:
+                                  - process_after: 10
                                     min_interval: 2
                                     kind: bulksms
                                     data:
@@ -409,9 +475,9 @@ func TestGetAliveConfig(t *testing.T) {
 			expectedConfig: aliveConfig{
 				Alive: []aliveItem{
 					{
-						SinceLastSeen: 10,
-						MinInterval:   2,
-						Kind:          "bulksms",
+						ProcessAfter: 10,
+						MinInterval:  2,
+						Kind:         "bulksms",
 						Data: map[string]interface{}{
 							"message":     "test",
 							"destination": []interface{}{"1111"},

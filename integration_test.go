@@ -27,10 +27,11 @@ func TestDMH(t *testing.T) {
 	processMessagesInterval = 1
 	aliveProbeInterval = 1
 	aliveProbeIntervalUnit = time.Second
-	aliveSinceLastSeenUnit = time.Second
+	aliveProcessAfterUnit = time.Second
 	aliveMinIntervalUnit = time.Second
 	processMessagesIntervalUnit = time.Second
 	processAfterIntervalUnit = time.Second
+	actionMinIntervalUnit = time.Second
 
 	f, err := os.Create(stateFile)
 	defer os.Remove(stateFile)
@@ -63,8 +64,8 @@ func TestDMH(t *testing.T) {
       url: http://127.0.0.1:8080
       client_uuid: %s
     alive:
-      - min_interval: 1
-        since_last_seen: 1
+      - min_interval: 4
+        process_after: 1
         kind: json_post
         data:
           url: http://127.0.0.1:9090/alive
@@ -82,17 +83,19 @@ func TestDMH(t *testing.T) {
 		require.Nil(t, err)
 	}
 
-	hitEndpoint := map[string]bool{
-		"/alive":       false,
-		"/test":        false,
-		"/action/test": false,
+	hitEndpoint := map[string]int{
+		"/alive":               0,
+		"/test":                0,
+		"/action/once":         0,
+		"/action/test":         0,
+		"/action/min_interval": 0,
 	}
 	// Lets start fake server which can be used by Actions.
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		require.Nil(t, err)
 
-		hitEndpoint[r.URL.RequestURI()] = true
+		hitEndpoint[r.URL.RequestURI()] += 1
 
 		if r.URL.RequestURI() == "/alive" {
 			require.Equal(t, `{"field1":"alive-test"}`, string(body))
@@ -101,8 +104,14 @@ func TestDMH(t *testing.T) {
 			require.Equal(t, `{"key1":"value1","key2":true}`, string(body))
 			require.Equal(t, "test", r.Header.Get("header1"))
 			require.Equal(t, "test2", r.Header.Get("header2"))
+		} else if r.URL.RequestURI() == "/action/once" {
+			require.Equal(t, `{"key1":"value1"}`, string(body))
 		} else if r.URL.RequestURI() == "/action/test" {
 			require.Equal(t, `{"key1":"value1","key2":"action/test"}`, string(body))
+			require.Equal(t, "test1", r.Header.Get("header3"))
+			require.Equal(t, "test2", r.Header.Get("header4"))
+		} else if r.URL.RequestURI() == "/action/min_interval" {
+			require.Equal(t, `{"key1":"value1","key2":"action/min_interval"}`, string(body))
 			require.Equal(t, "test1", r.Header.Get("header3"))
 			require.Equal(t, "test2", r.Header.Get("header4"))
 		} else {
@@ -150,12 +159,6 @@ func TestDMH(t *testing.T) {
 
 	}
 
-	// Lets update LastSeen
-	resp, err := http.Get("http://127.0.0.1:8080/api/alive")
-	require.Nil(t, err)
-	defer resp.Body.Close()
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-
 	// Lets test /api/action/test
 	action := &state.Action{
 		Kind:         "json_post",
@@ -166,7 +169,7 @@ func TestDMH(t *testing.T) {
 	actionJson, err := json.Marshal(action)
 	require.Nil(t, err)
 
-	resp, err = http.Post("http://127.0.0.1:8080/api/action/test", "application/json", bytes.NewBuffer(actionJson))
+	resp, err := http.Post("http://127.0.0.1:8080/api/action/test", "application/json", bytes.NewBuffer(actionJson))
 	require.Nil(t, err)
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
@@ -176,7 +179,49 @@ func TestDMH(t *testing.T) {
 		Kind:         "json_post",
 		ProcessAfter: 10,
 		Comment:      "comment",
-		Data:         `{"url":"http://127.0.0.1:9090/test","data":{"key1":"value1"},"success_code":[200]}`,
+		Data:         `{"url":"http://127.0.0.1:9090/action/once","data":{"key1":"value1"},"success_code":[200]}`,
+	}
+
+	actionJson, err = json.Marshal(action)
+	require.Nil(t, err)
+
+	resp, err = http.Post("http://127.0.0.1:8080/api/action/store", "application/json", bytes.NewBuffer(actionJson))
+	require.Nil(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+	// Lets add new Action with min_interval
+	action = &state.Action{
+		Kind:         "json_post",
+		ProcessAfter: 1,
+		MinInterval:  2,
+		Comment:      "min_interval",
+		Data:         `{"url":"http://127.0.0.1:9090/action/min_interval","data":{"key1":"value1","key2":"action/min_interval"},"headers":{"header3":"test1","header4":"test2"},"success_code":[200]}`,
+	}
+
+	actionJson, err = json.Marshal(action)
+	require.Nil(t, err)
+
+	resp, err = http.Post("http://127.0.0.1:8080/api/action/store", "application/json", bytes.NewBuffer(actionJson))
+	require.Nil(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+	// Lets wait for min_interval action to run 2x.
+	time.Sleep(6 * time.Second)
+
+	// Lets update LastSeen
+	resp, err = http.Get("http://127.0.0.1:8080/api/alive")
+	require.Nil(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	// Lets add new Action
+	action = &state.Action{
+		Kind:         "json_post",
+		ProcessAfter: 1,
+		Comment:      "never_executed",
+		Data:         `{"url":"http://127.0.0.1:9090/action/never_executed","data":{"key1":"value1","key2":"action/min_interval"},"headers":{"header3":"test1","header4":"test2"},"success_code":[200]}`,
 	}
 
 	actionJson, err = json.Marshal(action)
@@ -195,7 +240,7 @@ func TestDMH(t *testing.T) {
 	err = json.NewDecoder(resp.Body).Decode(&actions)
 	require.Nil(t, err)
 
-	require.Equal(t, 3, len(actions))
+	require.Equal(t, 5, len(actions))
 	addedActionEncrypted := actions[2]
 	require.NotEqual(t, action.Data, addedActionEncrypted.Data)
 	require.Equal(t, fmt.Sprintf("http://127.0.0.1:8080/api/vault/store/%s/%s", clientUUID, addedActionEncrypted.UUID), addedActionEncrypted.EncryptionMeta.VaultURL)
@@ -205,6 +250,7 @@ func TestDMH(t *testing.T) {
 		expectUUID         string
 		expectKind         string
 		expectProcessAfter int
+		expectMinInterval  int
 		expectComment      string
 		expectProcessed    int
 	}{
@@ -226,6 +272,19 @@ func TestDMH(t *testing.T) {
 			expectKind:         "json_post",
 			expectProcessAfter: 10,
 			expectComment:      "comment",
+			expectProcessed:    2,
+		},
+		{
+			expectKind:         "json_post",
+			expectProcessAfter: 1,
+			expectMinInterval:  2,
+			expectComment:      "min_interval",
+			expectProcessed:    0,
+		},
+		{
+			expectKind:         "json_post",
+			expectProcessAfter: 1,
+			expectComment:      "never_executed",
 			expectProcessed:    0,
 		},
 	} {
@@ -234,6 +293,7 @@ func TestDMH(t *testing.T) {
 		}
 		require.Equal(t, test.expectKind, actions[i].Kind)
 		require.Equal(t, test.expectProcessAfter, actions[i].ProcessAfter)
+		require.Equal(t, test.expectMinInterval, actions[i].MinInterval)
 		require.Equal(t, test.expectComment, actions[i].Comment)
 		require.Equal(t, test.expectProcessed, actions[i].Processed)
 	}
@@ -274,8 +334,14 @@ func TestDMH(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, resp.StatusCode)
 
 	// Lets ensure that all fakeServer endpoints were visited
-	require.Equal(t, 3, len(hitEndpoint))
-	for k, v := range hitEndpoint {
-		require.True(t, v, fmt.Sprintf("%s endpoint was not visited", k))
+	require.Equal(t, 5, len(hitEndpoint))
+	for k, v := range map[string]int{
+		"/alive":               2,
+		"/test":                1,
+		"/action/once":         1,
+		"/action/test":         1,
+		"/action/min_interval": 2,
+	} {
+		require.Equal(t, v, hitEndpoint[k])
 	}
 }
