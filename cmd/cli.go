@@ -77,6 +77,12 @@ func main() {
 								Required: true,
 								Value:    12,
 							},
+							&cli.IntFlag{
+								Name:    "min-interval",
+								Aliases: []string{"i"},
+								Usage:   "Process action after <param> hours from last run. If min-interval > 0, action will be run FOREVER and NOT ONCE. USE WITH CAUTION!",
+								Value:   0,
+							},
 						},
 						Action: addAction,
 					},
@@ -167,6 +173,7 @@ func addAction(ctx context.Context, cmd *cli.Command) error {
 	comment := cmd.String("comment")
 	kind := cmd.String("kind")
 	processAfter := cmd.Int("process-after")
+	minInterval := cmd.Int("min-interval")
 
 	if data == "" {
 		return cli.Exit("Data is required", 1)
@@ -176,6 +183,7 @@ func addAction(ctx context.Context, cmd *cli.Command) error {
 		"kind":          kind,
 		"data":          data,
 		"process_after": processAfter,
+		"min_interval":  minInterval,
 	}
 	if comment != "" {
 		payload["comment"] = comment

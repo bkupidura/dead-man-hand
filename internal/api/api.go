@@ -151,6 +151,7 @@ type addTestActionRequest struct {
 	Data         string `json:"data"`
 	Comment      string `json:"comment"`
 	ProcessAfter int    `json:"process_after"`
+	MinInterval  int    `json:"min_interval"`
 }
 
 // Bind validates addTestActionRequest.
@@ -159,6 +160,7 @@ func (req *addTestActionRequest) Bind(r *http.Request) error {
 		Kind:         req.Kind,
 		Comment:      req.Comment,
 		ProcessAfter: req.ProcessAfter,
+		MinInterval:  req.MinInterval,
 		Data:         req.Data,
 	}
 	if _, err := execute.UnmarshalActionData(a); err != nil {
@@ -167,6 +169,10 @@ func (req *addTestActionRequest) Bind(r *http.Request) error {
 
 	if req.ProcessAfter <= 0 {
 		return fmt.Errorf("process_after should be greater than 0")
+	}
+
+	if req.MinInterval < 0 {
+		return fmt.Errorf("min_interval should be greater or equal 0")
 	}
 	return nil
 }
@@ -184,6 +190,7 @@ func addActionHandler(s state.StateInterface) func(http.ResponseWriter, *http.Re
 			Kind:         request.Kind,
 			Data:         request.Data,
 			ProcessAfter: request.ProcessAfter,
+			MinInterval:  request.MinInterval,
 			Comment:      request.Comment,
 		}
 

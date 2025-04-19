@@ -69,6 +69,16 @@ func (m *mockState) DecryptAction(uuid string) (*state.Action, error) {
 	return args.Get(0).(*state.Action), args.Error(1)
 }
 
+func (m *mockState) UpdateActionLastRun(uuid string) error {
+	args := m.Called(uuid)
+	return args.Error(0)
+}
+
+func (m *mockState) GetActionLastRun(uuid string) (time.Time, error) {
+	args := m.Called(uuid)
+	return args.Get(0).(time.Time), args.Error(1)
+}
+
 type mockVault struct {
 	mock.Mock
 }
@@ -353,11 +363,31 @@ func TestAddActionRequestBind(t *testing.T) {
 			},
 		},
 		{
-			payload: `{"kind": "bulksms", "data": "{\"message\":\"test\",\"destination\":[\"111\"]}", "process_after": 10}`,
+			payload:       `{"kind": "bulksms", "data": "{\"message\":\"test\",\"destination\":[\"111\"]}", "process_after": 10, "min_interval": -1}`,
+			expectedError: fmt.Errorf("min_interval should be greater or equal 0"),
 			expectedReq: &addTestActionRequest{
 				Kind:         "bulksms",
 				Data:         "{\"message\":\"test\",\"destination\":[\"111\"]}",
 				ProcessAfter: 10,
+				MinInterval:  -1,
+			},
+		},
+		{
+			payload: `{"kind": "bulksms", "data": "{\"message\":\"test\",\"destination\":[\"111\"]}", "process_after": 10, "min_interval": 0}`,
+			expectedReq: &addTestActionRequest{
+				Kind:         "bulksms",
+				Data:         "{\"message\":\"test\",\"destination\":[\"111\"]}",
+				ProcessAfter: 10,
+				MinInterval:  0,
+			},
+		},
+		{
+			payload: `{"kind": "bulksms", "data": "{\"message\":\"test\",\"destination\":[\"111\"]}", "process_after": 10, "min_interval": 10}`,
+			expectedReq: &addTestActionRequest{
+				Kind:         "bulksms",
+				Data:         "{\"message\":\"test\",\"destination\":[\"111\"]}",
+				ProcessAfter: 10,
+				MinInterval:  10,
 			},
 		},
 	}

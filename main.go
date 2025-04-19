@@ -20,10 +20,11 @@ var (
 	processMessagesInterval     = 15
 	aliveProbeInterval          = 15
 	aliveProbeIntervalUnit      = time.Minute
-	aliveSinceLastSeenUnit      = time.Hour
+	aliveProcessAfterUnit       = time.Hour
 	aliveMinIntervalUnit        = time.Hour
 	processMessagesIntervalUnit = time.Minute
 	processAfterIntervalUnit    = time.Hour
+	actionMinIntervalUnit       = time.Hour
 )
 
 func main() {
@@ -113,8 +114,8 @@ func dispatcher(s state.StateInterface, e execute.ExecuteInterface, a aliveConfi
 				select {
 				case <-ticker.C:
 					now := time.Now()
-					// Execute only when now - LastSeen > alive.SinceLastSeen * aliveSinceLastSeenUnit
-					if now.Sub(s.GetLastSeen()) > time.Duration(item.SinceLastSeen)*aliveSinceLastSeenUnit {
+					// Execute only when now - LastSeen > alive.ProcessAfter * aliveProcessAfterUnit
+					if now.Sub(s.GetLastSeen()) > time.Duration(item.ProcessAfter)*aliveProcessAfterUnit {
 						// Execute only when now - lastRun > alive.MinInterval * aliveMinIntervalUnit
 						if now.Sub(lastRun) > time.Duration(item.MinInterval)*aliveMinIntervalUnit {
 							lastRun = now
@@ -141,20 +142,33 @@ func dispatcher(s state.StateInterface, e execute.ExecuteInterface, a aliveConfi
 				}
 				now := time.Now()
 				if now.Sub(s.GetLastSeen()) > time.Duration(a.ProcessAfter)*processAfterIntervalUnit {
-					if a.Processed == 0 {
-						decryptedAction, err := s.DecryptAction(a.UUID)
-						if err != nil {
-							log.Printf("unable to decrypt action %s: %s", a.UUID, err)
-							continue
-						}
-						if err := e.Run(decryptedAction); err != nil {
-							log.Printf("unable to run action %s: %s", a.UUID, err)
-							continue
-						}
-					}
-					if err := s.MarkActionAsProcessed(a.UUID); err != nil {
-						log.Printf("unable to mark action %s as processed: %s", a.UUID, err)
+					lastRun, err := s.GetActionLastRun(a.UUID)
+					if err != nil {
+						log.Printf("unable to get action last run  %s: %s", a.UUID, err)
 						continue
+					}
+					if now.Sub(lastRun) > time.Duration(a.MinInterval)*actionMinIntervalUnit {
+						if a.Processed == 0 {
+							decryptedAction, err := s.DecryptAction(a.UUID)
+							if err != nil {
+								log.Printf("unable to decrypt action %s: %s", a.UUID, err)
+								continue
+							}
+							if err := e.Run(decryptedAction); err != nil {
+								log.Printf("unable to run action %s: %s", a.UUID, err)
+								continue
+							}
+							if err := s.UpdateActionLastRun(a.UUID); err != nil {
+								log.Printf("unable to update action last run %s: %s", a.UUID, err)
+								continue
+							}
+						}
+						if a.MinInterval <= 0 {
+							if err := s.MarkActionAsProcessed(a.UUID); err != nil {
+								log.Printf("unable to mark action %s as processed: %s", a.UUID, err)
+								continue
+							}
+						}
 					}
 				}
 			}

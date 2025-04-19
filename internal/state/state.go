@@ -34,6 +34,7 @@ type VaultData struct {
 type Action struct {
 	Kind         string `json:"kind"`          // kind of action to execute (mail, bulksms, json_post)
 	ProcessAfter int    `json:"process_after"` // number of hours (since last seen) before executing action
+	MinInterval  int    `json:"min_interval"`  // number of hours (since last run) before executing action AGAIN. If this is >0 action will be executed forever, use with caution!
 	Comment      string `json:"comment"`       // comment, it will NOT be encrypted
 	Data         string `json:"data"`          // json representation of data needed by kind
 }
@@ -50,6 +51,7 @@ type EncryptedAction struct {
 	Action
 	UUID           string         `json:"uuid"`       // action random uuid
 	Processed      int            `json:"processed"`  // if action was already processed, 0 - not executed, 1 - executed, 2 - executed && priv key deleted from vault
+	LastRun        time.Time      `json:"last_run"`   // when action was last executed.
 	EncryptionMeta EncryptionMeta `json:"encryption"` // encryption metadata
 }
 
@@ -65,6 +67,8 @@ type data struct {
 type StateInterface interface {
 	UpdateLastSeen()
 	GetLastSeen() time.Time
+	UpdateActionLastRun(string) error
+	GetActionLastRun(string) (time.Time, error)
 	GetActions() []*EncryptedAction
 	GetAction(string) (*EncryptedAction, int)
 	AddAction(*Action) error
@@ -119,6 +123,26 @@ func (s *State) GetLastSeen() time.Time {
 	return s.data.LastSeen
 }
 
+// UpdateActionLastRun updates LastRun for action.
+func (s *State) UpdateActionLastRun(u string) error {
+	a, _ := s.GetAction(u)
+	if a == nil {
+		return fmt.Errorf("missing action with uuid %s", u)
+	}
+	a.LastRun = time.Now()
+	s.save()
+	return nil
+}
+
+// GetActionLastRun returns action LastRun.
+func (s *State) GetActionLastRun(u string) (time.Time, error) {
+	a, _ := s.GetAction(u)
+	if a == nil {
+		return time.Time{}, fmt.Errorf("missing action with uuid %s", u)
+	}
+	return a.LastRun, nil
+}
+
 // AddAction converts Action to EncryptedAction and stores it in State.
 // AddAction also uploads private encryption key to remote vault.
 func (s *State) AddAction(a *Action) error {
@@ -133,6 +157,7 @@ func (s *State) AddAction(a *Action) error {
 		Action: Action{
 			Kind:         a.Kind,
 			ProcessAfter: a.ProcessAfter,
+			MinInterval:  a.MinInterval,
 			Comment:      a.Comment,
 		},
 		UUID:      encryptedActionUUID,

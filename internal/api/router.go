@@ -20,6 +20,7 @@ func NewRouter(opts *Options) *chi.Mux {
 		if opts.DMHEnabled {
 			r.Route("/api/alive", func(r chi.Router) {
 				r.Get("/", aliveHandler(opts.State, opts.VaultURL, opts.VaultClientUUID))
+				r.Post("/", aliveHandler(opts.State, opts.VaultURL, opts.VaultClientUUID))
 			})
 			r.Route("/api/action/test", func(r chi.Router) {
 				r.Post("/", testActionHandler(opts.Execute))

@@ -183,6 +183,46 @@ func TestGetLastSeen(t *testing.T) {
 	require.Equal(t, s.data.LastSeen, s.GetLastSeen())
 }
 
+func TestUpdateActionLastRun(t *testing.T) {
+	os.Remove("test_state.json")
+	defer os.Remove("test_state.json")
+
+	s := &State{
+		data: &data{
+			Actions: []*EncryptedAction{
+				{UUID: "test"},
+			},
+		},
+		savePath: "test_state.json",
+	}
+	err := s.UpdateActionLastRun("non-existing")
+	require.NotNil(t, err)
+	err = s.UpdateActionLastRun("test")
+	require.Nil(t, err)
+	require.GreaterOrEqual(t, float64(1), time.Now().Sub(s.data.Actions[0].LastRun).Seconds())
+}
+
+func TestGetActionLastRun(t *testing.T) {
+	mockTime, err := time.Parse("2006-01-02T15:04:05.999999-07:00", "2025-03-26T14:55:40.119447+01:00")
+	require.Nil(t, err)
+
+	s := &State{
+		data: &data{
+			LastSeen: mockTime,
+			Actions: []*EncryptedAction{
+				{UUID: "test", LastRun: mockTime},
+			},
+		},
+	}
+	lr, err := s.GetActionLastRun("non-existing")
+	require.NotNil(t, err)
+	require.Equal(t, time.Time{}, lr)
+
+	lr, err = s.GetActionLastRun("test")
+	require.Nil(t, err)
+	require.Equal(t, s.data.Actions[0].LastRun, lr)
+}
+
 func TestAddAction(t *testing.T) {
 	tests := []struct {
 		inputAction     []*Action
@@ -1524,7 +1564,7 @@ func TestSave(t *testing.T) {
 					Processed: 0,
 				},
 			},
-			expectedData: `{"last_seen":"2025-03-26T14:55:40.119447+01:00","actions":[{"kind":"mail","process_after":20,"comment":"test","data":"encrypted","uuid":"test","processed":1,"encryption":{"kind":"","vault_url":""}},{"kind":"mail","process_after":20,"comment":"test","data":"encrypted2","uuid":"test2","processed":0,"encryption":{"kind":"","vault_url":""}}]}` + "\n",
+			expectedData: `{"last_seen":"2025-03-26T14:55:40.119447+01:00","actions":[{"kind":"mail","process_after":20,"min_interval":0,"comment":"test","data":"encrypted","uuid":"test","processed":1,"last_run":"0001-01-01T00:00:00Z","encryption":{"kind":"","vault_url":""}},{"kind":"mail","process_after":20,"min_interval":0,"comment":"test","data":"encrypted2","uuid":"test2","processed":0,"last_run":"0001-01-01T00:00:00Z","encryption":{"kind":"","vault_url":""}}]}` + "\n",
 		},
 	}
 

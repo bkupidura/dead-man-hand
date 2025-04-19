@@ -64,6 +64,16 @@ func (m *mockState) DecryptAction(uuid string) (*state.Action, error) {
 	return args.Get(0).(*state.Action), args.Error(1)
 }
 
+func (m *mockState) UpdateActionLastRun(uuid string) error {
+	args := m.Called(uuid)
+	return args.Error(0)
+}
+
+func (m *mockState) GetActionLastRun(uuid string) (time.Time, error) {
+	args := m.Called(uuid)
+	return args.Get(0).(time.Time), args.Error(1)
+}
+
 func TestInitialize(t *testing.T) {
 	tests := []struct {
 		inputOpts             func() *Options
