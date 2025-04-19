@@ -12,7 +12,6 @@ Main goal of `DMH` is to ensure that actions can be executed only when you are d
 - Tested - almost 100% code covered by unit tests and integration tests.
 - Small footprint (less than 20MB of RAM needed)
 - Multiple action execution methods (`json_post`, `bulksms`, `mail`)
-- Multiple alive probe methods (`json_post`, `bulksms`, `mail`)
 
 # How it works
 <img width="1023" alt="dmh-flow" src="https://github.com/user-attachments/assets/63a5a1a9-c692-4ade-a971-073b807653fe" />
@@ -54,4 +53,4 @@ docker run --name dead-man-hand -e DMH_CONFIG_FILE=/data/config.yaml -v /srv/dea
 * `bulksms` - send `SMS` with [bulksms.com](https://bulksms.com)
 
 # Documentation
-All documentation is available in [wiki](https://github.com/bkupidura/dead-man-hand/wiki)
+Documentation is available in [wiki](https://github.com/bkupidura/dead-man-hand/wiki)
