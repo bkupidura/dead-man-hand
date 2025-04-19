@@ -25,12 +25,8 @@ func TestDMH(t *testing.T) {
 	requiredEnvs := map[string]string{"DMH_CONFIG_FILE": configFile}
 
 	processMessagesInterval = 1
-	aliveProbeInterval = 1
-	aliveProbeIntervalUnit = time.Second
-	aliveProcessAfterUnit = time.Second
-	aliveMinIntervalUnit = time.Second
 	processMessagesIntervalUnit = time.Second
-	processAfterIntervalUnit = time.Second
+	actionProcessAfterUnit = time.Second
 	actionMinIntervalUnit = time.Second
 
 	f, err := os.Create(stateFile)
@@ -63,18 +59,6 @@ func TestDMH(t *testing.T) {
     remote_vault:
       url: http://127.0.0.1:8080
       client_uuid: %s
-    alive:
-      - min_interval: 4
-        process_after: 1
-        kind: json_post
-        data:
-          url: http://127.0.0.1:9090/alive
-          headers:
-            type: alive
-          data:
-            field1: alive-test
-          success_code:
-            - 200
     `, vaultFile, stateFile, clientUUID))
 	require.Nil(t, err)
 
@@ -127,6 +111,26 @@ func TestDMH(t *testing.T) {
 	defer s.Close()
 
 	go main()
+	time.Sleep(1 * time.Second)
+
+	// Lets add new alive Action
+	action := &state.Action{
+		Kind:         "json_post",
+		ProcessAfter: 1,
+		MinInterval:  4,
+		Comment:      "alive",
+		Data:         `{"url":"http://127.0.0.1:9090/alive","data":{"field1":"alive-test"},"headers":{"type":"alive"},"success_code":[200]}`,
+	}
+
+	actionJson, err := json.Marshal(action)
+	require.Nil(t, err)
+
+	resp, err := http.Post("http://127.0.0.1:8080/api/action/store", "application/json", bytes.NewBuffer(actionJson))
+	require.Nil(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+	// Lets give alive probe some time to run
 	time.Sleep(3 * time.Second)
 
 	// Fetch all secrets from vault, LastSeen is out-of-sync, so everything is released.
@@ -160,16 +164,16 @@ func TestDMH(t *testing.T) {
 	}
 
 	// Lets test /api/action/test
-	action := &state.Action{
+	action = &state.Action{
 		Kind:         "json_post",
 		ProcessAfter: 10,
 		Data:         `{"url":"http://127.0.0.1:9090/action/test","data":{"key1":"value1", "key2": "action/test"}, "headers": {"header3": "test1", "header4": "test2"}, "success_code":[200]}`,
 	}
 
-	actionJson, err := json.Marshal(action)
+	actionJson, err = json.Marshal(action)
 	require.Nil(t, err)
 
-	resp, err := http.Post("http://127.0.0.1:8080/api/action/test", "application/json", bytes.NewBuffer(actionJson))
+	resp, err = http.Post("http://127.0.0.1:8080/api/action/test", "application/json", bytes.NewBuffer(actionJson))
 	require.Nil(t, err)
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
@@ -240,7 +244,7 @@ func TestDMH(t *testing.T) {
 	err = json.NewDecoder(resp.Body).Decode(&actions)
 	require.Nil(t, err)
 
-	require.Equal(t, 5, len(actions))
+	require.Equal(t, 6, len(actions))
 	addedActionEncrypted := actions[2]
 	require.NotEqual(t, action.Data, addedActionEncrypted.Data)
 	require.Equal(t, fmt.Sprintf("http://127.0.0.1:8080/api/vault/store/%s/%s", clientUUID, addedActionEncrypted.UUID), addedActionEncrypted.EncryptionMeta.VaultURL)
@@ -267,6 +271,13 @@ func TestDMH(t *testing.T) {
 			expectProcessAfter: 10,
 			expectComment:      "test",
 			expectProcessed:    2,
+		},
+		{
+			expectKind:         "json_post",
+			expectProcessAfter: 1,
+			expectMinInterval:  4,
+			expectComment:      "alive",
+			expectProcessed:    0,
 		},
 		{
 			expectKind:         "json_post",

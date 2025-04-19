@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -17,13 +16,9 @@ import (
 )
 
 var (
-	processMessagesInterval     = 15
-	aliveProbeInterval          = 15
-	aliveProbeIntervalUnit      = time.Minute
-	aliveProcessAfterUnit       = time.Hour
-	aliveMinIntervalUnit        = time.Hour
+	processMessagesInterval     = 10
 	processMessagesIntervalUnit = time.Minute
-	processAfterIntervalUnit    = time.Hour
+	actionProcessAfterUnit      = time.Hour
 	actionMinIntervalUnit       = time.Hour
 )
 
@@ -69,9 +64,7 @@ func main() {
 			log.Panicf("unable to create execute: %s", err)
 		}
 
-		alive := getAliveConfig(k)
-
-		go dispatcher(s, e, alive)
+		go dispatcher(s, e)
 	}
 
 	if slices.Contains(enabledComponents, "vault") {
@@ -100,38 +93,7 @@ func main() {
 	http.ListenAndServe(fmt.Sprintf(":%d", api.HTTPPort), httpRouter)
 }
 
-func dispatcher(s state.StateInterface, e execute.ExecuteInterface, a aliveConfig) {
-	for _, alive := range a.Alive {
-		ticker := time.NewTicker(time.Duration(aliveProbeInterval) * aliveProbeIntervalUnit)
-		go func(ticker *time.Ticker, item aliveItem, e execute.ExecuteInterface, s state.StateInterface) {
-			aliveData, err := json.Marshal(item.Data)
-			if err != nil {
-				log.Printf("unable to parse alive config %v: %s, skipping...", item, err)
-				return
-			}
-			var lastRun time.Time
-			for {
-				select {
-				case <-ticker.C:
-					now := time.Now()
-					// Execute only when now - LastSeen > alive.ProcessAfter * aliveProcessAfterUnit
-					if now.Sub(s.GetLastSeen()) > time.Duration(item.ProcessAfter)*aliveProcessAfterUnit {
-						// Execute only when now - lastRun > alive.MinInterval * aliveMinIntervalUnit
-						if now.Sub(lastRun) > time.Duration(item.MinInterval)*aliveMinIntervalUnit {
-							lastRun = now
-							if err := e.Run(&state.Action{
-								Kind: item.Kind,
-								Data: string(aliveData),
-							}); err != nil {
-								log.Printf("unable to run alive probe: %s", err)
-							}
-						}
-					}
-				}
-			}
-		}(ticker, alive, e, s)
-	}
-
+func dispatcher(s state.StateInterface, e execute.ExecuteInterface) {
 	processMessagesTicker := time.NewTicker(time.Duration(processMessagesInterval) * processMessagesIntervalUnit)
 	for {
 		select {
@@ -141,7 +103,7 @@ func dispatcher(s state.StateInterface, e execute.ExecuteInterface, a aliveConfi
 					continue
 				}
 				now := time.Now()
-				if now.Sub(s.GetLastSeen()) > time.Duration(a.ProcessAfter)*processAfterIntervalUnit {
+				if now.Sub(s.GetLastSeen()) > time.Duration(a.ProcessAfter)*actionProcessAfterUnit {
 					lastRun, err := s.GetActionLastRun(a.UUID)
 					if err != nil {
 						log.Printf("unable to get action last run  %s: %s", a.UUID, err)
@@ -154,6 +116,7 @@ func dispatcher(s state.StateInterface, e execute.ExecuteInterface, a aliveConfi
 								log.Printf("unable to decrypt action %s: %s", a.UUID, err)
 								continue
 							}
+							log.Printf("running action %s (kind:%s, comment:%s)", a.UUID, a.Kind, a.Comment)
 							if err := e.Run(decryptedAction); err != nil {
 								log.Printf("unable to run action %s: %s", a.UUID, err)
 								continue
