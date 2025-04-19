@@ -48,10 +48,10 @@ docker run --name dead-man-hand -e DMH_CONFIG_FILE=/data/config.yaml -v /srv/dea
 # Execute plugins
 
 `DMH` is easly extensible and support below plugins:
-* dummy - log action message
-* json_post - send `HTTP` `POST` request
-* mail - send mail over `SMTP`
-* bulksms - send `SMS` with [bulksms.com](https://bulksms.com)
+* `dummy` - log action message
+* `json_post` - send `HTTP` `POST` request
+* `mail` - send mail over `SMTP`
+* `bulksms` - send `SMS` with [bulksms.com](https://bulksms.com)
 
 # Documentation
 All documentation is available in [wiki](https://github.com/bkupidura/dead-man-hand/wiki)
