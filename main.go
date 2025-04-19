@@ -111,12 +111,12 @@ func dispatcher(s state.StateInterface, e execute.ExecuteInterface) {
 					}
 					if now.Sub(lastRun) > time.Duration(a.MinInterval)*actionMinIntervalUnit {
 						if a.Processed == 0 {
+                                                        log.Printf("running action %s (kind:%s, comment:%s)", a.UUID, a.Kind, a.Comment)
 							decryptedAction, err := s.DecryptAction(a.UUID)
 							if err != nil {
 								log.Printf("unable to decrypt action %s: %s", a.UUID, err)
 								continue
 							}
-							log.Printf("running action %s (kind:%s, comment:%s)", a.UUID, a.Kind, a.Comment)
 							if err := e.Run(decryptedAction); err != nil {
 								log.Printf("unable to run action %s: %s", a.UUID, err)
 								continue
