@@ -19,6 +19,7 @@ clean:
 .PHONY: test
 test:
 	go test -cover ./...
+	go test -cover -tags=integration .
 
 # Format code
 .PHONY: vet
