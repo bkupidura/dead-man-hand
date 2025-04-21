@@ -18,6 +18,7 @@ import (
 var (
 	getActionsInterval     = 5
 	getActionsIntervalUnit = time.Minute
+	actionProcessUnit      = time.Hour
 	// mocks for tests
 	stateNew   = state.New
 	executeNew = execute.New
@@ -36,7 +37,6 @@ func main() {
 
 	enabledComponents := k.Strings("components")
 
-	var actionProcessUnit time.Duration
 	switch k.String("action.process_unit") {
 	case "second":
 		actionProcessUnit = time.Second
@@ -76,7 +76,7 @@ func main() {
 			log.Panicf("unable to create execute: %s", err)
 		}
 
-		go dispatcher(s, e, actionProcessUnit)
+		go dispatcher(s, e, actionProcessUnit, make(chan bool))
 	}
 
 	if slices.Contains(enabledComponents, "vault") {
@@ -106,7 +106,7 @@ func main() {
 	http.ListenAndServe(fmt.Sprintf(":%d", api.HTTPPort), httpRouter)
 }
 
-func dispatcher(s state.StateInterface, e execute.ExecuteInterface, actionProcessUnit time.Duration) {
+func dispatcher(s state.StateInterface, e execute.ExecuteInterface, actionProcessUnit time.Duration, chStop chan bool) {
 	processActionsTicker := time.NewTicker(time.Duration(getActionsInterval) * getActionsIntervalUnit)
 	for {
 		select {
@@ -148,6 +148,9 @@ func dispatcher(s state.StateInterface, e execute.ExecuteInterface, actionProces
 					}
 				}
 			}
+		// used only for tests
+		case <-chStop:
+			return
 		}
 	}
 }
