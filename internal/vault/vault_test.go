@@ -41,22 +41,37 @@ func TestNew(t *testing.T) {
 	}{
 		{
 			inputOptions: &Options{
-				SavePath: vaultFile,
-				Key:      "AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0",
+				SavePath:          vaultFile,
+				Key:               "AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0",
+				SecretProcessUnit: time.Hour,
 			},
 			expectedVault: func() VaultInterface {
 				return &Vault{
-					data:     map[string]*VaultData{},
-					key:      "AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0",
-					savePath: vaultFile,
+					data:              map[string]*VaultData{},
+					key:               "AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0",
+					savePath:          vaultFile,
+					secretProcessUnit: time.Hour,
 				}
 			},
 			vaultPathFunc: func() {},
 		},
 		{
 			inputOptions: &Options{
-				SavePath: vaultFile,
-				Key:      "AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0",
+				SavePath:          vaultFile,
+				Key:               "AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0",
+				SecretProcessUnit: time.Millisecond,
+			},
+			expectedVault: func() VaultInterface {
+				return nil
+			},
+			expectedError: fmt.Errorf("SecretProcessUnit must be bigger than second"),
+			vaultPathFunc: func() {},
+		},
+		{
+			inputOptions: &Options{
+				SavePath:          vaultFile,
+				Key:               "AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0",
+				SecretProcessUnit: time.Second,
 			},
 			expectedVault: func() VaultInterface {
 				return nil
@@ -72,8 +87,9 @@ func TestNew(t *testing.T) {
 		},
 		{
 			inputOptions: &Options{
-				SavePath: vaultFile,
-				Key:      "AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0",
+				SavePath:          vaultFile,
+				Key:               "AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0",
+				SecretProcessUnit: time.Hour,
 			},
 			expectedVault: func() VaultInterface {
 				mockTime, err := time.Parse("2006-01-02T15:04:05.999999-07:00", "2025-03-26T14:55:40.119447+01:00")
@@ -103,8 +119,9 @@ func TestNew(t *testing.T) {
 							},
 						},
 					},
-					key:      "AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0",
-					savePath: vaultFile,
+					key:               "AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0",
+					savePath:          vaultFile,
+					secretProcessUnit: time.Hour,
 				}
 			},
 			vaultPathFunc: func() {
@@ -187,7 +204,8 @@ func TestGetSecret(t *testing.T) {
 							},
 						},
 					},
-					key: "AGE-SECRET-KEY-1GEUMZFAZD42WGZFGATTTJHV4SURK8LU507QVCAKXKJP6UTFMJTCS0E3QJ4",
+					key:               "AGE-SECRET-KEY-1GEUMZFAZD42WGZFGATTTJHV4SURK8LU507QVCAKXKJP6UTFMJTCS0E3QJ4",
+					secretProcessUnit: time.Hour,
 				}
 				return v
 			},
@@ -218,7 +236,8 @@ func TestGetSecret(t *testing.T) {
 							},
 						},
 					},
-					key: "AGE-SECRET-KEY-1GEUMZFAZD42WGZFGATTTJHV4SURK8LU507QVCAKXKJP6UTFMJTCS0E3QJ4",
+					key:               "AGE-SECRET-KEY-1GEUMZFAZD42WGZFGATTTJHV4SURK8LU507QVCAKXKJP6UTFMJTCS0E3QJ4",
+					secretProcessUnit: time.Hour,
 				}
 				return v
 			},
@@ -249,7 +268,8 @@ func TestGetSecret(t *testing.T) {
 							},
 						},
 					},
-					key: "AGE-SECRET-KEY-1GEUMZFAZD42WGZFGATTTJHV4SURK8LU507QVCAKXKJP6UTFMJTCS0E3QJ4",
+					key:               "AGE-SECRET-KEY-1GEUMZFAZD42WGZFGATTTJHV4SURK8LU507QVCAKXKJP6UTFMJTCS0E3QJ4",
+					secretProcessUnit: time.Hour,
 				}
 				return v
 			},
@@ -282,7 +302,8 @@ func TestGetSecret(t *testing.T) {
 							},
 						},
 					},
-					key: "AGE-SECRET-KEY-1GEUMZFAZD42WGZFGATTTJHV4SURK8LU507QVCAKXKJP6UTFMJTCS0E3QJ4",
+					key:               "AGE-SECRET-KEY-1GEUMZFAZD42WGZFGATTTJHV4SURK8LU507QVCAKXKJP6UTFMJTCS0E3QJ4",
+					secretProcessUnit: time.Hour,
 				}
 				return v
 			},
@@ -315,7 +336,8 @@ func TestGetSecret(t *testing.T) {
 							},
 						},
 					},
-					key: "AGE-SECRET-KEY-1GEUMZFAZD42WGZFGATTTJHV4SURK8LU507QVCAKXKJP6UTFMJTCS0E3QJ4",
+					key:               "AGE-SECRET-KEY-1GEUMZFAZD42WGZFGATTTJHV4SURK8LU507QVCAKXKJP6UTFMJTCS0E3QJ4",
+					secretProcessUnit: time.Hour,
 				}
 				return v
 			},
@@ -348,7 +370,8 @@ func TestGetSecret(t *testing.T) {
 							},
 						},
 					},
-					key: "AGE-SECRET-KEY-1GEUMZFAZD42WGZFGATTTJHV4SURK8LU507QVCAKXKJP6UTFMJTCS0E3QJ4",
+					key:               "AGE-SECRET-KEY-1GEUMZFAZD42WGZFGATTTJHV4SURK8LU507QVCAKXKJP6UTFMJTCS0E3QJ4",
+					secretProcessUnit: time.Hour,
 				}
 				return v
 			},
@@ -384,7 +407,8 @@ func TestGetSecret(t *testing.T) {
 							},
 						},
 					},
-					key: "AGE-SECRET-KEY-1GEUMZFAZD42WGZFGATTTJHV4SURK8LU507QVCAKXKJP6UTFMJTCS0E3QJ4",
+					key:               "AGE-SECRET-KEY-1GEUMZFAZD42WGZFGATTTJHV4SURK8LU507QVCAKXKJP6UTFMJTCS0E3QJ4",
+					secretProcessUnit: time.Hour,
 				}
 				return v
 			},
@@ -424,7 +448,8 @@ func TestGetSecret(t *testing.T) {
 							},
 						},
 					},
-					key: "AGE-SECRET-KEY-1GEUMZFAZD42WGZFGATTTJHV4SURK8LU507QVCAKXKJP6UTFMJTCS0E3QJ4",
+					key:               "AGE-SECRET-KEY-1GEUMZFAZD42WGZFGATTTJHV4SURK8LU507QVCAKXKJP6UTFMJTCS0E3QJ4",
+					secretProcessUnit: time.Hour,
 				}
 				return v
 			},
@@ -463,7 +488,8 @@ func TestGetSecret(t *testing.T) {
 							},
 						},
 					},
-					key: "AGE-SECRET-KEY-1GEUMZFAZD42WGZFGATTTJHV4SURK8LU507QVCAKXKJP6UTFMJTCS0E3QJ4",
+					key:               "AGE-SECRET-KEY-1GEUMZFAZD42WGZFGATTTJHV4SURK8LU507QVCAKXKJP6UTFMJTCS0E3QJ4",
+					secretProcessUnit: time.Hour,
 				}
 				return v
 			},
@@ -528,7 +554,8 @@ func TestAddSecret(t *testing.T) {
 							},
 						},
 					},
-					key: "AGE-SECRET-KEY-1GEUMZFAZD42WGZFGATTTJHV4SURK8LU507QVCAKXKJP6UTFMJTCS0E3QJ4",
+					key:               "AGE-SECRET-KEY-1GEUMZFAZD42WGZFGATTTJHV4SURK8LU507QVCAKXKJP6UTFMJTCS0E3QJ4",
+					secretProcessUnit: time.Hour,
 				}
 				return v
 			},
@@ -566,7 +593,8 @@ func TestAddSecret(t *testing.T) {
 							},
 						},
 					},
-					key: "AGE-SECRET-KEY-1GEUMZFAZD42WGZFGATTTJHV4SURK8LU507QVCAKXKJP6UTFMJTCS0E3QJ4",
+					key:               "AGE-SECRET-KEY-1GEUMZFAZD42WGZFGATTTJHV4SURK8LU507QVCAKXKJP6UTFMJTCS0E3QJ4",
+					secretProcessUnit: time.Hour,
 				}
 				return v
 			},
@@ -607,7 +635,8 @@ func TestAddSecret(t *testing.T) {
 							},
 						},
 					},
-					key: "AGE-SECRET-KEY-1GEUMZFAZD42WGZFGATTTJHV4SURK8LU507QVCAKXKJP6UTFMJTCS0E3QJ4",
+					key:               "AGE-SECRET-KEY-1GEUMZFAZD42WGZFGATTTJHV4SURK8LU507QVCAKXKJP6UTFMJTCS0E3QJ4",
+					secretProcessUnit: time.Hour,
 				}
 				return v
 			},
@@ -650,7 +679,8 @@ func TestAddSecret(t *testing.T) {
 							},
 						},
 					},
-					key: "AGE-SECRET-KEY-1GEUMZFAZD42WGZFGATTTJHV4SURK8LU507QVCAKXKJP6UTFMJTCS0E3QJ4",
+					key:               "AGE-SECRET-KEY-1GEUMZFAZD42WGZFGATTTJHV4SURK8LU507QVCAKXKJP6UTFMJTCS0E3QJ4",
+					secretProcessUnit: time.Hour,
 				}
 				return v
 			},
@@ -730,6 +760,7 @@ func TestDeleteSecret(t *testing.T) {
 							},
 						},
 					},
+					secretProcessUnit: time.Hour,
 				}
 				return v
 			},
@@ -775,6 +806,7 @@ func TestDeleteSecret(t *testing.T) {
 							},
 						},
 					},
+					secretProcessUnit: time.Hour,
 				}
 				return v
 			},
@@ -822,6 +854,7 @@ func TestDeleteSecret(t *testing.T) {
 							},
 						},
 					},
+					secretProcessUnit: time.Hour,
 				}
 				return v
 			},
@@ -869,6 +902,7 @@ func TestDeleteSecret(t *testing.T) {
 							},
 						},
 					},
+					secretProcessUnit: time.Hour,
 				}
 				return v
 			},
@@ -907,6 +941,7 @@ func TestDeleteSecret(t *testing.T) {
 							},
 						},
 					},
+					secretProcessUnit: time.Hour,
 				}
 				return v
 			},
