@@ -16,7 +16,7 @@ import (
 )
 
 var (
-	getActionsInterval     = 10
+	getActionsInterval     = 5
 	getActionsIntervalUnit = time.Minute
 	// mocks for tests
 	stateNew   = state.New

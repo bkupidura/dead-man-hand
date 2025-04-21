@@ -392,7 +392,7 @@ func TestAddAction(t *testing.T) {
 					require.Equal(t, "application/json", contentType)
 					body, err := io.ReadAll(r.Body)
 					require.Nil(t, err)
-					require.Equal(t, "{\"key\":\"AGE-SECRET-KEY-1CUGTTN4UQCDCFQAY7QM8C4RM4KGE7LN47D5SUU9MQVHEPDPWR04Q5NN5D8\",\"process_after\":10}", string(body))
+					require.Equal(t, "{\"key\":\"AGE-SECRET-KEY-1CUGTTN4UQCDCFQAY7QM8C4RM4KGE7LN47D5SUU9MQVHEPDPWR04Q5NN5D8\",\"process_after\":10,\"encryption\":{\"kind\":\"\"}}", string(body))
 					w.WriteHeader(http.StatusCreated)
 				}))
 				return s
