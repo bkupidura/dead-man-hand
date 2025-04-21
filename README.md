@@ -17,14 +17,13 @@ Main goal of `DMH` is to ensure that actions can be executed only when you are d
 <img width="1023" alt="dmh-flow" src="https://github.com/user-attachments/assets/63a5a1a9-c692-4ade-a971-073b807653fe" />
 
 1. User creates action
-2. DMH encrypt action with [age](https://github.com/FiloSottile/age)
+2. DMH encrypts action with [age](https://github.com/FiloSottile/age)
 3. DMH uploads encryption private key to Vault
 4. Vault encrypts private key with own key and saves it (Vault will `release` encryption private key when user will be considered dead)
 5. DMH saves encrypted action, discards plaintext action, discards private key (**from now, nobody is able to see unencrypted action, even DMH**)
-6. DMH will sent alive probes to user
-7. When user will ignore N probes (configured per action), she/he would be considered dead.
-8. When both DMH and Vault will decide that user is dead, Vault secrets will be released, actions would be decrypted and executed.
-9. After execution, DMH will remove encryption private key from Vault - to ensure that action will remain confidential (only valid for actions with `min_interval: 0`).
+6. When user will not be available for some time (configured per action), she/he would be considered dead.
+7. When both DMH and Vault will decide that user is dead, Vault secrets will be released, actions would be decrypted and executed.
+8. After execution, DMH will remove encryption private key from Vault - to ensure that action will remain confidential (only valid for actions with `min_interval: 0`).
 
 
 **To decrypt action, access to `DMH` and `Vault` is required - `DMH` stores encrypted data and `Vault` stores encryption key.**
@@ -33,7 +32,7 @@ Main goal of `DMH` is to ensure that actions can be executed only when you are d
 
 # Installation
 
-## Docker (recommendated)
+## Docker (recommended)
 ```
 docker run --name dead-man-hand -e DMH_CONFIG_FILE=/data/config.yaml -v /srv/dead-man-hand/data:/data -p 8080:8080 ghcr.io/bkupidura/dead-man-hand:latest
 ```

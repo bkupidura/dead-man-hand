@@ -24,10 +24,8 @@ func TestDMH(t *testing.T) {
 	clientUUID := "integration-test-client-uuid"
 	requiredEnvs := map[string]string{"DMH_CONFIG_FILE": configFile}
 
-	processMessagesInterval = 1
-	processMessagesIntervalUnit = time.Second
-	actionProcessAfterUnit = time.Second
-	actionMinIntervalUnit = time.Second
+	getActionsInterval = 1
+	getActionsIntervalUnit = time.Second
 
 	f, err := os.Create(stateFile)
 	defer os.Remove(stateFile)
@@ -56,6 +54,8 @@ func TestDMH(t *testing.T) {
       file: %s
     state:
       file: %s
+    action:
+      process_unit: second
     remote_vault:
       url: http://127.0.0.1:8080
       client_uuid: %s

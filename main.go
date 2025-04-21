@@ -16,10 +16,12 @@ import (
 )
 
 var (
-	processMessagesInterval     = 10
-	processMessagesIntervalUnit = time.Minute
-	actionProcessAfterUnit      = time.Hour
-	actionMinIntervalUnit       = time.Hour
+	getActionsInterval     = 10
+	getActionsIntervalUnit = time.Minute
+	// mocks for tests
+	stateNew   = state.New
+	executeNew = execute.New
+	vaultNew   = vault.New
 )
 
 func main() {
@@ -34,6 +36,16 @@ func main() {
 
 	enabledComponents := k.Strings("components")
 
+	var actionProcessUnit time.Duration
+	switch k.String("action.process_unit") {
+	case "second":
+		actionProcessUnit = time.Second
+	case "minute":
+		actionProcessUnit = time.Minute
+	default:
+		actionProcessUnit = time.Hour
+	}
+
 	if slices.Contains(enabledComponents, "dmh") && slices.Contains(enabledComponents, "vault") {
 		log.Printf("dmh and vault component enabled. THIS IS NOT RECOMENDATED FOR SECURITY REASONS!")
 	}
@@ -44,7 +56,7 @@ func main() {
 	var err error
 	if slices.Contains(enabledComponents, "dmh") {
 		log.Printf("starting DMH component")
-		s, err = state.New(&state.Options{
+		s, err = stateNew(&state.Options{
 			VaultURL:        k.String("remote_vault.url"),
 			VaultClientUUID: k.String("remote_vault.client_uuid"),
 			SavePath:        k.String("state.file"),
@@ -56,7 +68,7 @@ func main() {
 		bulkSMSConf := getBulkSMSConfig(k)
 		mailConf := getMailConfig(k)
 
-		e, err = execute.New(&execute.Options{
+		e, err = executeNew(&execute.Options{
 			BulkSMSConf: bulkSMSConf,
 			MailConf:    mailConf,
 		})
@@ -64,14 +76,15 @@ func main() {
 			log.Panicf("unable to create execute: %s", err)
 		}
 
-		go dispatcher(s, e)
+		go dispatcher(s, e, actionProcessUnit)
 	}
 
 	if slices.Contains(enabledComponents, "vault") {
 		log.Printf("starting vault component")
-		v, err = vault.New(&vault.Options{
-			Key:      k.String("vault.key"),
-			SavePath: k.String("vault.file"),
+		v, err = vaultNew(&vault.Options{
+			Key:               k.String("vault.key"),
+			SavePath:          k.String("vault.file"),
+			SecretProcessUnit: actionProcessUnit,
 		})
 		if err != nil {
 			log.Panicf("unable to create vault: %s", err)
@@ -93,25 +106,25 @@ func main() {
 	http.ListenAndServe(fmt.Sprintf(":%d", api.HTTPPort), httpRouter)
 }
 
-func dispatcher(s state.StateInterface, e execute.ExecuteInterface) {
-	processMessagesTicker := time.NewTicker(time.Duration(processMessagesInterval) * processMessagesIntervalUnit)
+func dispatcher(s state.StateInterface, e execute.ExecuteInterface, actionProcessUnit time.Duration) {
+	processActionsTicker := time.NewTicker(time.Duration(getActionsInterval) * getActionsIntervalUnit)
 	for {
 		select {
-		case <-processMessagesTicker.C:
+		case <-processActionsTicker.C:
 			for _, a := range s.GetActions() {
 				if a.Processed == 2 {
 					continue
 				}
 				now := time.Now()
-				if now.Sub(s.GetLastSeen()) > time.Duration(a.ProcessAfter)*actionProcessAfterUnit {
+				if now.Sub(s.GetLastSeen()) > time.Duration(a.ProcessAfter)*actionProcessUnit {
 					lastRun, err := s.GetActionLastRun(a.UUID)
 					if err != nil {
 						log.Printf("unable to get action last run  %s: %s", a.UUID, err)
 						continue
 					}
-					if now.Sub(lastRun) > time.Duration(a.MinInterval)*actionMinIntervalUnit {
+					if now.Sub(lastRun) > time.Duration(a.MinInterval)*actionProcessUnit {
 						if a.Processed == 0 {
-                                                        log.Printf("running action %s (kind:%s, comment:%s)", a.UUID, a.Kind, a.Comment)
+							log.Printf("running action %s (kind:%s, comment:%s)", a.UUID, a.Kind, a.Comment)
 							decryptedAction, err := s.DecryptAction(a.UUID)
 							if err != nil {
 								log.Printf("unable to decrypt action %s: %s", a.UUID, err)

@@ -11,7 +11,6 @@ import (
 )
 
 var (
-	secretReleaseIntervalUnit = time.Hour
 	// mocks for tests
 	osCreate = os.Create
 	cryptNew = crypt.New
@@ -38,9 +37,10 @@ type VaultData struct {
 
 // Vault internal data.
 type Vault struct {
-	data     map[string]*VaultData // stores vault data string index is client-uuid
-	key      string                // Vault uses this key to encrypt all secrets before storing them on disk
-	savePath string
+	data              map[string]*VaultData // stores vault data string index is client-uuid
+	key               string                // Vault uses this key to encrypt all secrets before storing them on disk
+	savePath          string                // Vault will dump and loads its state from this file
+	secretProcessUnit time.Duration         // time unit used to decide when key should be released.
 }
 
 // VaultInterface describes Vault.
@@ -54,10 +54,14 @@ type VaultInterface interface {
 // New returns new instance of VaultInterface.
 // It will try to load saved vault state from disk.
 func New(opts *Options) (VaultInterface, error) {
+	if opts.SecretProcessUnit < time.Second {
+		return nil, fmt.Errorf("SecretProcessUnit must be bigger than second")
+	}
 	v := &Vault{
-		data:     map[string]*VaultData{},
-		key:      opts.Key,
-		savePath: opts.SavePath,
+		data:              map[string]*VaultData{},
+		key:               opts.Key,
+		savePath:          opts.SavePath,
+		secretProcessUnit: opts.SecretProcessUnit,
 	}
 	f, err := os.Open(v.savePath)
 	if err != nil {
@@ -94,7 +98,7 @@ func (v *Vault) GetSecret(clientUUID string, secretUUID string) (*Secret, error)
 		return nil, fmt.Errorf("secret %s/%s is missing", clientUUID, secretUUID)
 	}
 
-	if now.Sub(lastSeen) <= time.Duration(secret.ProcessAfter)*secretReleaseIntervalUnit {
+	if now.Sub(lastSeen) <= time.Duration(secret.ProcessAfter)*v.secretProcessUnit {
 		return nil, fmt.Errorf("secret %s/%s is not released yet", clientUUID, secretUUID)
 	}
 
@@ -166,7 +170,7 @@ func (v *Vault) DeleteSecret(clientUUID string, secretUUID string) error {
 		return fmt.Errorf("secret %s/%s is missing", clientUUID, secretUUID)
 	}
 
-	if now.Sub(lastSeen) <= time.Duration(secret.ProcessAfter)*secretReleaseIntervalUnit {
+	if now.Sub(lastSeen) <= time.Duration(secret.ProcessAfter)*v.secretProcessUnit {
 		return fmt.Errorf("secret %s/%s is not released yet", clientUUID, secretUUID)
 	}
 
