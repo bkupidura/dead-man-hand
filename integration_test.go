@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"dmh/internal/state"
+	"dmh/internal/vault"
 
 	"github.com/stretchr/testify/require"
 )
@@ -155,10 +156,10 @@ func TestDMH(t *testing.T) {
 		defer resp.Body.Close()
 		require.Equal(t, test.expectedCode, resp.StatusCode)
 		if test.expectedKey != "" {
-			var vaultData state.VaultData
-			err = json.NewDecoder(resp.Body).Decode(&vaultData)
+			var vaultSecret vault.Secret
+			err = json.NewDecoder(resp.Body).Decode(&vaultSecret)
 			require.Nil(t, err)
-			require.Equal(t, test.expectedKey, vaultData.Key)
+			require.Equal(t, test.expectedKey, vaultSecret.Key)
 		}
 
 	}

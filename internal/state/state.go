@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"dmh/internal/crypt"
+	"dmh/internal/vault"
 
 	"github.com/google/uuid"
 )
@@ -20,14 +21,6 @@ var (
 	osCreate    = os.Create
 	jsonMarshal = json.Marshal
 )
-
-// VaultData is stored in remote vault.
-// It will be 'realeased' (allowing to fetch/delete) only after
-// ProcessAfter hours since last seen.
-type VaultData struct {
-	Key          string `json:"key"`           // encryption private key
-	ProcessAfter int    `json:"process_after"` // number of hours (since last seen) before data can be retured by vault
-}
 
 // Action stores user actions.
 // Action is stored only in memory when created via API. It is never saved.
@@ -174,16 +167,16 @@ func (s *State) AddAction(a *Action) error {
 	}
 	encrypted.Action.Data = dataEncrypted
 
-	vaultData := &VaultData{
+	vaultSecret := &vault.Secret{
 		Key:          c.GetPrivateKey(),
 		ProcessAfter: a.ProcessAfter,
 	}
-	vaultDataJson, err := jsonMarshal(vaultData)
+	vaultSecretJson, err := jsonMarshal(vaultSecret)
 	if err != nil {
 		return err
 	}
 
-	resp, err := http.Post(encrypted.EncryptionMeta.VaultURL, "application/json", bytes.NewBuffer(vaultDataJson))
+	resp, err := http.Post(encrypted.EncryptionMeta.VaultURL, "application/json", bytes.NewBuffer(vaultSecretJson))
 	if err != nil {
 		return err
 	}
@@ -277,12 +270,12 @@ func (s *State) DecryptAction(u string) (*Action, error) {
 		return nil, fmt.Errorf("unable to get vault data, status code %d", resp.StatusCode)
 	}
 
-	var vaultData VaultData
-	if err := json.NewDecoder(resp.Body).Decode(&vaultData); err != nil {
+	var vaultSecret vault.Secret
+	if err := json.NewDecoder(resp.Body).Decode(&vaultSecret); err != nil {
 		return nil, err
 	}
 
-	c, err := cryptNew(vaultData.Key)
+	c, err := cryptNew(vaultSecret.Key)
 	if err != nil {
 		return nil, err
 	}
