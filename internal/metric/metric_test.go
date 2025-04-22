@@ -10,6 +10,7 @@ import (
 
 	"dmh/internal/state"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -92,8 +93,12 @@ func TestInitialize(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		prometheus.Unregister(actions)
 		p := Initialize(test.inputOpts())
 		p.chStop <- true
+		defer func() {
+			prometheus.Unregister(actions)
+		}()
 		expectedP := test.expectedPromCollector()
 		require.Equal(t, expectedP.s, p.s)
 		require.Equal(t, reflect.TypeOf(expectedP.chStop), reflect.TypeOf(p.chStop))
@@ -102,24 +107,24 @@ func TestInitialize(t *testing.T) {
 
 func TestCollect(t *testing.T) {
 	tests := []struct {
-		inputPromCollector func() *promCollector
-		expectedRegexp     []*regexp.Regexp
+		inputOptions   func() *Options
+		expectedRegexp []*regexp.Regexp
 	}{
 		{
-			inputPromCollector: func() *promCollector {
-				return &promCollector{chStop: make(chan bool), s: nil}
+			inputOptions: func() *Options {
+				return &Options{State: nil}
 			},
 			expectedRegexp: []*regexp.Regexp{},
 		},
 		{
-			inputPromCollector: func() *promCollector {
+			inputOptions: func() *Options {
 				s := new(mockState)
 				s.On("GetActions").Return([]*state.EncryptedAction{
 					{},
 					{},
 					{Processed: 2},
 				})
-				return &promCollector{chStop: make(chan bool), s: s}
+				return &Options{State: s}
 			},
 			expectedRegexp: []*regexp.Regexp{
 				regexp.MustCompile(`dmh_actions{processed="0"} 2`),
@@ -128,14 +133,14 @@ func TestCollect(t *testing.T) {
 			},
 		},
 		{
-			inputPromCollector: func() *promCollector {
+			inputOptions: func() *Options {
 				s := new(mockState)
 				s.On("GetActions").Return([]*state.EncryptedAction{
 					{Processed: 1},
 					{Processed: 0},
 					{Processed: 2},
 				})
-				return &promCollector{chStop: make(chan bool), s: s}
+				return &Options{State: s}
 			},
 			expectedRegexp: []*regexp.Regexp{
 				regexp.MustCompile(`dmh_actions{processed="0"} 1`),
@@ -150,8 +155,11 @@ func TestCollect(t *testing.T) {
 	}()
 
 	for _, test := range tests {
-		p := test.inputPromCollector()
-		go p.collect()
+		prometheus.Unregister(actions)
+		p := Initialize(test.inputOptions())
+		defer func() {
+			prometheus.Unregister(actions)
+		}()
 
 		time.Sleep(time.Duration(collectInterval*2) * time.Second)
 		p.chStop <- true
