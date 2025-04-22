@@ -13,10 +13,16 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-const defaultServerAddr = "http://localhost:8080"
+const defaultServerAddr = "http://127.0.0.1:8080"
 
-func main() {
-	cmd := &cli.Command{
+var getClient = func(cmd *cli.Command) *http.Client {
+	return &http.Client{
+		Timeout: 5 * time.Second,
+	}
+}
+
+func createCLI() *cli.Command {
+	return &cli.Command{
 		Name:    "dmh-client",
 		Usage:   "Manage dead-man-hand",
 		Version: "1.0.0",
@@ -121,16 +127,13 @@ func main() {
 			},
 		},
 	}
+}
 
+func main() {
+	cmd := createCLI()
 	if err := cmd.Run(context.Background(), os.Args); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
-	}
-}
-
-func getClient(cmd *cli.Command) *http.Client {
-	return &http.Client{
-		Timeout: 5 * time.Second,
 	}
 }
 
@@ -176,7 +179,10 @@ func addAction(ctx context.Context, cmd *cli.Command) error {
 	minInterval := cmd.Int("min-interval")
 
 	if data == "" {
-		return cli.Exit("Data is required", 1)
+		return fmt.Errorf("data is required")
+	}
+	if kind == "" {
+		return fmt.Errorf("kind is required")
 	}
 
 	payload := map[string]interface{}{
@@ -220,7 +226,10 @@ func testAction(ctx context.Context, cmd *cli.Command) error {
 	kind := cmd.String("kind")
 
 	if data == "" {
-		return cli.Exit("Data is required", 1)
+		return fmt.Errorf("data is required")
+	}
+	if kind == "" {
+		return fmt.Errorf("kind is required")
 	}
 
 	payload := map[string]interface{}{
@@ -259,6 +268,10 @@ func deleteAction(ctx context.Context, cmd *cli.Command) error {
 	client := getClient(cmd)
 	server := cmd.String("server")
 	uuid := cmd.String("uuid")
+
+	if uuid == "" {
+		return fmt.Errorf("uuid is required")
+	}
 
 	req, err := http.NewRequest(
 		"DELETE",

@@ -69,6 +69,7 @@ func TestDMH(t *testing.T) {
 	for k, v := range requiredEnvs {
 		err := os.Setenv(k, v)
 		require.Nil(t, err)
+		defer os.Unsetenv(k)
 	}
 
 	hitEndpoint := map[string]int{

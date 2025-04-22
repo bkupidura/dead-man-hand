@@ -18,7 +18,7 @@ clean:
 # Run tests
 .PHONY: test
 test:
-	go test -cover ./...
+	go test -cover -shuffle=on ./...
 	go test -cover -tags=integration .
 
 # Format code
