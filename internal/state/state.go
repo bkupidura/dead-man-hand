@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"time"
 
@@ -146,6 +147,11 @@ func (s *State) AddAction(a *Action) error {
 
 	encryptedActionUUID := uuid.NewString()
 
+	vaultURL, err := url.JoinPath(s.vaultURL, "api", "vault", "store", s.vaultClientUUID, encryptedActionUUID)
+	if err != nil {
+		return fmt.Errorf("unable to parse address: %s", err)
+	}
+
 	encrypted := &EncryptedAction{
 		Action: Action{
 			Kind:         a.Kind,
@@ -157,7 +163,7 @@ func (s *State) AddAction(a *Action) error {
 		Processed: 0,
 		EncryptionMeta: EncryptionMeta{
 			Kind:     crypt.EncryptionKind,
-			VaultURL: fmt.Sprintf("%s/api/vault/store/%s/%s", s.vaultURL, s.vaultClientUUID, encryptedActionUUID),
+			VaultURL: vaultURL,
 		},
 	}
 

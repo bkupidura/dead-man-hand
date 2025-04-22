@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"time"
 
@@ -140,7 +141,11 @@ func main() {
 func updateAlive(ctx context.Context, cmd *cli.Command) error {
 	client := getClient(cmd)
 	server := cmd.String("server")
-	resp, err := client.Get(fmt.Sprintf("%s/api/alive", server))
+	endpointAddress, err := url.JoinPath(server, "api", "alive")
+	if err != nil {
+		return fmt.Errorf("unable to parse address: %s", err)
+	}
+	resp, err := client.Get(endpointAddress)
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
 	}
@@ -156,7 +161,11 @@ func updateAlive(ctx context.Context, cmd *cli.Command) error {
 func listActions(ctx context.Context, cmd *cli.Command) error {
 	client := getClient(cmd)
 	server := cmd.String("server")
-	resp, err := client.Get(fmt.Sprintf("%s/api/action/store", server))
+	endpointAddress, err := url.JoinPath(server, "api", "action", "store")
+	if err != nil {
+		return fmt.Errorf("unable to parse address: %s", err)
+	}
+	resp, err := client.Get(endpointAddress)
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
 	}
@@ -202,8 +211,12 @@ func addAction(ctx context.Context, cmd *cli.Command) error {
 
 	client := getClient(cmd)
 	server := cmd.String("server")
+	endpointAddress, err := url.JoinPath(server, "api", "action", "store")
+	if err != nil {
+		return fmt.Errorf("unable to parse address: %s", err)
+	}
 	resp, err := client.Post(
-		fmt.Sprintf("%s/api/action/store", server),
+		endpointAddress,
 		"application/json",
 		bytes.NewBuffer(jsonData),
 	)
@@ -245,8 +258,12 @@ func testAction(ctx context.Context, cmd *cli.Command) error {
 
 	client := getClient(cmd)
 	server := cmd.String("server")
+	endpointAddress, err := url.JoinPath(server, "api", "action", "test")
+	if err != nil {
+		return fmt.Errorf("unable to parse address: %s", err)
+	}
 	resp, err := client.Post(
-		fmt.Sprintf("%s/api/action/test", server),
+		endpointAddress,
 		"application/json",
 		bytes.NewBuffer(jsonData),
 	)
@@ -273,9 +290,14 @@ func deleteAction(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("uuid is required")
 	}
 
+	endpointAddress, err := url.JoinPath(server, "api", "action", "store", uuid)
+	if err != nil {
+		return fmt.Errorf("unable to parse address: %s", err)
+	}
+
 	req, err := http.NewRequest(
 		"DELETE",
-		fmt.Sprintf("%s/api/action/store/%s", server, uuid),
+		endpointAddress,
 		nil,
 	)
 	if err != nil {
