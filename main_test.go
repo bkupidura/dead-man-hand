@@ -128,6 +128,7 @@ func TestReadingConfig(t *testing.T) {
 			err := os.Setenv("DMH_CONFIG_FILE", test.envConfigVar)
 			require.Nil(t, err)
 			defer os.Remove(test.envConfigVar)
+			defer os.Unsetenv("DMH_CONFIG_FILE")
 		} else {
 			os.Unsetenv("DMH_CONFIG_FILE")
 		}
@@ -238,10 +239,12 @@ func TestActionProcessUnit(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
+		os.Remove(configFile)
 		test.inputConfig()
 		err := os.Setenv("DMH_CONFIG_FILE", configFile)
 		require.Nil(t, err)
 		defer os.Remove(configFile)
+		defer os.Unsetenv("DMH_CONFIG_FILE")
 		stateNew = func(*state.Options) (state.StateInterface, error) {
 			return nil, fmt.Errorf("mockStateNew error")
 		}
@@ -294,6 +297,7 @@ func TestComponentsErrors(t *testing.T) {
 	require.Nil(t, err)
 	err = os.Setenv("DMH_CONFIG_FILE", "TestDMHComponentErrors.yaml")
 	require.Nil(t, err)
+	defer os.Unsetenv("DMH_CONFIG_FILE")
 	for _, test := range tests {
 		stateNew = state.New
 		if test.mockStateNew != nil {
