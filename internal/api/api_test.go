@@ -133,6 +133,11 @@ func TestAliveHandler(t *testing.T) {
 		expectedCode         int
 	}{
 		{
+			inputVaultURL:        "http://wrong\r",
+			inputVaultClientUUID: "test",
+			expectedCode:         http.StatusInternalServerError,
+		},
+		{
 			inputVaultURL:        "http://broken",
 			inputVaultClientUUID: "test",
 			expectedCode:         http.StatusInternalServerError,

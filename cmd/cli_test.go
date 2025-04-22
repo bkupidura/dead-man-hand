@@ -102,9 +102,14 @@ func TestActionDeleteRequiredParams(t *testing.T) {
 
 func TestUpdateAlive(t *testing.T) {
 	tests := []struct {
+		inputServer   string
 		mockHandler   http.HandlerFunc
 		expectedError string
 	}{
+		{
+			inputServer:   "\r",
+			expectedError: `unable to parse address: parse "\r": net/url: invalid control character in URL`,
+		},
 		{
 			expectedError: `request failed: Get "http://127.0.0.1:8080/api/alive": dial tcp 127.0.0.1:8080: connect: connection refused`,
 		},
@@ -135,7 +140,9 @@ func TestUpdateAlive(t *testing.T) {
 
 		cmd := createCLI()
 		var params []string
-		if fakeServer != nil {
+		if test.inputServer != "" {
+			params = []string{"dmh-cli", "alive", "update", "--server", test.inputServer}
+		} else if fakeServer != nil {
 			params = []string{"dmh-cli", "alive", "update", "--server", fakeServer.URL}
 		} else {
 			params = []string{"dmh-cli", "alive", "update"}
@@ -156,7 +163,12 @@ func TestListActions(t *testing.T) {
 	tests := []struct {
 		mockHandler   http.HandlerFunc
 		expectedError string
+		inputServer   string
 	}{
+		{
+			inputServer:   "\r",
+			expectedError: `unable to parse address: parse "\r": net/url: invalid control character in URL`,
+		},
 		{
 			expectedError: `request failed: Get "http://127.0.0.1:8080/api/action/store": dial tcp 127.0.0.1:8080: connect: connection refused`,
 		},
@@ -187,7 +199,9 @@ func TestListActions(t *testing.T) {
 
 		cmd := createCLI()
 		var params []string
-		if fakeServer != nil {
+		if test.inputServer != "" {
+			params = []string{"dmh-cli", "action", "list", "--server", test.inputServer}
+		} else if fakeServer != nil {
 			params = []string{"dmh-cli", "action", "list", "--server", fakeServer.URL}
 		} else {
 			params = []string{"dmh-cli", "action", "list"}
@@ -208,6 +222,7 @@ func TestAddAction(t *testing.T) {
 	tests := []struct {
 		mockHandler   http.HandlerFunc
 		inputParams   []string
+		inputServer   string
 		expectedError string
 	}{
 		{
@@ -217,6 +232,11 @@ func TestAddAction(t *testing.T) {
 		{
 			inputParams:   []string{"--data", `{"test": true}`, "--kind", "", "--process-after", "10", "--comment", "comment", "--min-interval", "3"},
 			expectedError: "kind is required",
+		},
+		{
+			inputServer:   "\r",
+			inputParams:   []string{"--data", `{"test": true}`, "--kind", "test", "--process-after", "10", "--comment", "comment", "--min-interval", "3"},
+			expectedError: `unable to parse address: parse "\r": net/url: invalid control character in URL`,
 		},
 		{
 			inputParams:   []string{"--data", `{"test": true}`, "--kind", "test", "--process-after", "10", "--comment", "comment", "--min-interval", "3"},
@@ -251,7 +271,9 @@ func TestAddAction(t *testing.T) {
 
 		cmd := createCLI()
 		var params []string
-		if fakeServer != nil {
+		if test.inputServer != "" {
+			params = []string{"dmh-cli", "action", "add", "--server", test.inputServer}
+		} else if fakeServer != nil {
 			params = []string{"dmh-cli", "action", "add", "--server", fakeServer.URL}
 		} else {
 			params = []string{"dmh-cli", "action", "add"}
@@ -274,6 +296,7 @@ func TestTestAction(t *testing.T) {
 	tests := []struct {
 		mockHandler   http.HandlerFunc
 		inputParams   []string
+		inputServer   string
 		expectedError string
 	}{
 		{
@@ -283,6 +306,11 @@ func TestTestAction(t *testing.T) {
 		{
 			inputParams:   []string{"--data", `{"test": true}`, "--kind", ""},
 			expectedError: "kind is required",
+		},
+		{
+			inputServer:   "\r",
+			inputParams:   []string{"--data", `{"test": true}`, "--kind", "test"},
+			expectedError: `unable to parse address: parse "\r": net/url: invalid control character in URL`,
 		},
 		{
 			inputParams:   []string{"--data", `{"test": true}`, "--kind", "test"},
@@ -317,7 +345,9 @@ func TestTestAction(t *testing.T) {
 
 		cmd := createCLI()
 		var params []string
-		if fakeServer != nil {
+		if test.inputServer != "" {
+			params = []string{"dmh-cli", "action", "test", "--server", test.inputServer}
+		} else if fakeServer != nil {
 			params = []string{"dmh-cli", "action", "test", "--server", fakeServer.URL}
 		} else {
 			params = []string{"dmh-cli", "action", "test"}
@@ -340,6 +370,7 @@ func TestDeleteAction(t *testing.T) {
 	tests := []struct {
 		mockHandler   http.HandlerFunc
 		inputParams   []string
+		inputServer   string
 		expectedError string
 	}{
 		{
@@ -347,8 +378,9 @@ func TestDeleteAction(t *testing.T) {
 			expectedError: "uuid is required",
 		},
 		{
-			inputParams:   []string{"--uuid", "\r"},
-			expectedError: `failed to create request: parse "http://127.0.0.1:8080/api/action/store/\r": net/url: invalid control character in URL`,
+			inputServer:   "\r",
+			inputParams:   []string{"--uuid", "test-uuid"},
+			expectedError: `unable to parse address: parse "\r": net/url: invalid control character in URL`,
 		},
 		{
 			inputParams:   []string{"--uuid", "test-uuid"},
@@ -383,7 +415,9 @@ func TestDeleteAction(t *testing.T) {
 
 		cmd := createCLI()
 		var params []string
-		if fakeServer != nil {
+		if test.inputServer != "" {
+			params = []string{"dmh-cli", "action", "delete", "--server", test.inputServer}
+		} else if fakeServer != nil {
 			params = []string{"dmh-cli", "action", "delete", "--server", fakeServer.URL}
 		} else {
 			params = []string{"dmh-cli", "action", "delete"}

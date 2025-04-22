@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 
 	"dmh/internal/execute"
 	"dmh/internal/state"
@@ -87,7 +88,14 @@ func aliveHandler(s state.StateInterface, vaultURL string, vaultClientUUID strin
 	return func(w http.ResponseWriter, r *http.Request) {
 		s.UpdateLastSeen()
 
-		resp, err := http.Get(fmt.Sprintf("%s/api/vault/alive/%s", vaultURL, vaultClientUUID))
+		endpointAddress, err := url.JoinPath(vaultURL, "api", "vault", "alive", vaultClientUUID)
+		if err != nil {
+			log.Printf("unable to parse address: %s", err)
+			render.Render(w, r, StatusErrInternal(nil))
+			return
+		}
+
+		resp, err := http.Get(endpointAddress)
 		if err != nil {
 			log.Printf("unable to connect to vault: %s", err)
 			render.Render(w, r, StatusErrInternal(nil))

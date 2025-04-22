@@ -274,6 +274,33 @@ func TestAddAction(t *testing.T) {
 						LastSeen: time.Now(),
 						Actions:  []*EncryptedAction{},
 					},
+					vaultURL:        "\r",
+					vaultClientUUID: "random-uuid",
+					savePath:        "test_state.json",
+				}
+				return s
+			},
+			mockCryptFunc: func(string) (crypt.CryptInterface, error) {
+				c := new(mockCrypt)
+				return c, nil
+			},
+			expectedError: true,
+		},
+		{
+			inputAction: []*Action{
+				{
+					Kind:         "mail",
+					ProcessAfter: 10,
+					Comment:      "a",
+					Data:         "test",
+				},
+			},
+			inputState: func() *State {
+				s := &State{
+					data: &data{
+						LastSeen: time.Now(),
+						Actions:  []*EncryptedAction{},
+					},
 					vaultURL:        "",
 					vaultClientUUID: "random-uuid",
 					savePath:        "test_state.json",
