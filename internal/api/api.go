@@ -89,11 +89,13 @@ func aliveHandler(s state.StateInterface, vaultURL string, vaultClientUUID strin
 
 		resp, err := http.Get(fmt.Sprintf("%s/api/vault/alive/%s", vaultURL, vaultClientUUID))
 		if err != nil {
+			log.Printf("unable to connect to vault: %s", err)
 			render.Render(w, r, StatusErrInternal(nil))
 			return
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
+			log.Printf("wrong http status code received from vault: %d", resp.StatusCode)
 			render.Render(w, r, StatusErrInternal(nil))
 			return
 		}
@@ -107,6 +109,7 @@ func vaultAliveHandler(v vault.VaultInterface) func(http.ResponseWriter, *http.R
 	return func(w http.ResponseWriter, r *http.Request) {
 		paramClientUUID := chi.URLParam(r, "clientUUID")
 		if paramClientUUID == "" {
+			log.Printf("wrong clientUUID provided")
 			render.Render(w, r, StatusErrNotFound(nil))
 			return
 		}
@@ -120,6 +123,7 @@ func testActionHandler(e execute.ExecuteInterface) func(http.ResponseWriter, *ht
 	return func(w http.ResponseWriter, r *http.Request) {
 		request := &addTestActionRequest{}
 		if err := render.Bind(r, request); err != nil {
+			log.Printf("wrong request data provided: %s", err)
 			render.Render(w, r, StatusErrInvalidRequest(err))
 			return
 		}
@@ -130,6 +134,7 @@ func testActionHandler(e execute.ExecuteInterface) func(http.ResponseWriter, *ht
 			ProcessAfter: request.ProcessAfter,
 		}
 		if err := e.Run(a); err != nil {
+			log.Printf("unable to run action: %s", err)
 			render.Render(w, r, StatusErrInvalidRequest(err))
 			return
 		}
@@ -182,6 +187,7 @@ func addActionHandler(s state.StateInterface) func(http.ResponseWriter, *http.Re
 	return func(w http.ResponseWriter, r *http.Request) {
 		request := &addTestActionRequest{}
 		if err := render.Bind(r, request); err != nil {
+			log.Printf("wrong request data provided: %s", err)
 			render.Render(w, r, StatusErrInvalidRequest(err))
 			return
 		}
@@ -195,6 +201,7 @@ func addActionHandler(s state.StateInterface) func(http.ResponseWriter, *http.Re
 		}
 
 		if err := s.AddAction(a); err != nil {
+			log.Printf("unable to add action: %s", err)
 			render.Render(w, r, StatusErrInternal(nil))
 			return
 		}
@@ -228,12 +235,14 @@ func addVaultSecretHandler(v vault.VaultInterface) func(http.ResponseWriter, *ht
 		paramSecretUUID := chi.URLParam(r, "secretUUID")
 
 		if paramClientUUID == "" || paramSecretUUID == "" {
+			log.Printf("wrong clientUUID or secretUUID provided")
 			render.Render(w, r, StatusErrInvalidRequest(fmt.Errorf("provide valid clientUUID or secretUUID")))
 			return
 		}
 
 		request := &addVaultSecretRequest{}
 		if err := render.Bind(r, request); err != nil {
+			log.Printf("wrong request data provided: %s", err)
 			render.Render(w, r, StatusErrInvalidRequest(err))
 			return
 		}
@@ -262,6 +271,7 @@ func getActionHandler(s state.StateInterface) func(http.ResponseWriter, *http.Re
 			render.JSON(w, r, a)
 			return
 		}
+		log.Printf("action with uuid %s not found", paramActionUUID)
 		render.Render(w, r, StatusErrNotFound(nil))
 	}
 }
@@ -273,7 +283,7 @@ func getVaultSecretHandler(v vault.VaultInterface) func(http.ResponseWriter, *ht
 		paramSecretUUID := chi.URLParam(r, "secretUUID")
 		s, err := v.GetSecret(paramClientUUID, paramSecretUUID)
 		if err != nil {
-			log.Printf("unable to return vault secret: %s", err)
+			log.Printf("unable to get vault secret: %s", err)
 			render.Render(w, r, StatusErrNotFound(nil))
 			return
 		}
@@ -287,6 +297,7 @@ func deleteActionHandler(s state.StateInterface) func(http.ResponseWriter, *http
 		paramActionUUID := chi.URLParam(r, "actionUUID")
 		err := s.DeleteAction(paramActionUUID)
 		if err != nil {
+			log.Printf("unable to delete action: %s", err)
 			render.Render(w, r, StatusErrNotFound(nil))
 			return
 		}
