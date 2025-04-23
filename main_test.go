@@ -292,7 +292,7 @@ func TestComponentsErrors(t *testing.T) {
                  client_uuid: uuid
                vault:
                  file: test2.yaml
-                 key: key
+                 key: AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0
              `)
 	require.Nil(t, err)
 	err = os.Setenv("DMH_CONFIG_FILE", "TestDMHComponentErrors.yaml")
