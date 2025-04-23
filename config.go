@@ -2,9 +2,11 @@ package main
 
 import (
 	"log"
+	"net/url"
 	"slices"
 	"strings"
 
+	"dmh/internal/crypt"
 	"dmh/internal/execute"
 
 	"github.com/knadh/koanf/parsers/yaml"
@@ -43,19 +45,36 @@ func readConfig(configFile string) *koanf.Koanf {
 		}
 	}
 
-	requiredKeysForComponents := []string{}
+	if len(k.Strings("components")) == 0 {
+		log.Panicf("required config key components cant be empty")
+	}
+
 	enabledComponents := k.Strings("components")
 
 	if slices.Contains(enabledComponents, "dmh") {
-		requiredKeysForComponents = append(requiredKeysForComponents, "state.file", "remote_vault.client_uuid", "remote_vault.url")
+		for _, configKey := range []string{"state.file", "remote_vault.client_uuid", "remote_vault.url"} {
+			if !k.Exists(configKey) {
+				log.Panicf("required config key %s is not defined", configKey)
+			}
+			if k.String(configKey) == "" {
+				log.Panicf("required config key %s cant be empty", configKey)
+			}
+		}
+		if _, err := url.ParseRequestURI(k.String("remote_vault.url")); err != nil {
+			log.Panicf("remote_vault.url must be a valid HTTP URL")
+		}
 	}
 	if slices.Contains(enabledComponents, "vault") {
-		requiredKeysForComponents = append(requiredKeysForComponents, "vault.file", "vault.key")
-	}
-
-	for _, configKey := range requiredKeysForComponents {
-		if !k.Exists(configKey) {
-			log.Panicf("required config key %s is not defined", configKey)
+		for _, configKey := range []string{"vault.file", "vault.key"} {
+			if !k.Exists(configKey) {
+				log.Panicf("required config key %s is not defined", configKey)
+			}
+			if k.String(configKey) == "" {
+				log.Panicf("required config key %s cant be empty", configKey)
+			}
+		}
+		if _, err := crypt.New(k.String("vault.key")); err != nil {
+			log.Panicf("vault.key must be a valid age private key")
 		}
 	}
 

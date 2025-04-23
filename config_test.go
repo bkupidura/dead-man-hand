@@ -56,6 +56,18 @@ func TestReadConfig(t *testing.T) {
 				require.Nil(t, err)
 				defer f.Close()
 				_, err = f.WriteString(`
+                                components: []
+                                `)
+				require.Nil(t, err)
+			},
+			shouldPanic: true,
+		},
+		{
+			configFunc: func(configFile string) {
+				f, err := os.Create(configFile)
+				require.Nil(t, err)
+				defer f.Close()
+				_, err = f.WriteString(`
                                 components:
                                 - dmh
                                 state:
@@ -77,6 +89,76 @@ func TestReadConfig(t *testing.T) {
                                   file: test.json
                                 remote_vault:
                                   client_uuid: test
+                                `)
+				require.Nil(t, err)
+			},
+			shouldPanic: true,
+		},
+		{
+			configFunc: func(configFile string) {
+				f, err := os.Create(configFile)
+				require.Nil(t, err)
+				defer f.Close()
+				_, err = f.WriteString(`
+                                components:
+                                - dmh
+                                state:
+                                  file:
+                                remote_vault:
+                                  client_uuid: test
+                                `)
+				require.Nil(t, err)
+			},
+			shouldPanic: true,
+		},
+		{
+			configFunc: func(configFile string) {
+				f, err := os.Create(configFile)
+				require.Nil(t, err)
+				defer f.Close()
+				_, err = f.WriteString(`
+                                components:
+                                - dmh
+                                state:
+                                  file: test.json
+                                remote_vault:
+                                  client_uuid:
+                                `)
+				require.Nil(t, err)
+			},
+			shouldPanic: true,
+		},
+		{
+			configFunc: func(configFile string) {
+				f, err := os.Create(configFile)
+				require.Nil(t, err)
+				defer f.Close()
+				_, err = f.WriteString(`
+                                components:
+                                - dmh
+                                state:
+                                  file: test.json
+                                remote_vault:
+                                  client_uuid: test
+                                  url:
+                                `)
+				require.Nil(t, err)
+			},
+			shouldPanic: true,
+		},
+		{
+			configFunc: func(configFile string) {
+				f, err := os.Create(configFile)
+				require.Nil(t, err)
+				defer f.Close()
+				_, err = f.WriteString(`
+                                components:
+                                - dmh
+                                state:
+                                  file: test.json
+                                remote_vault:
+                                  client_uuid: test
+                                  url: wrong
                                 `)
 				require.Nil(t, err)
 			},
@@ -136,7 +218,7 @@ func TestReadConfig(t *testing.T) {
                                 components:
                                 - vault
                                 vault:
-                                  key: test
+                                  key: AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0
                                 `)
 				require.Nil(t, err)
 			},
@@ -151,7 +233,55 @@ func TestReadConfig(t *testing.T) {
                                 components:
                                 - vault
                                 vault:
-                                  key: test
+                                  file:
+                                  key: AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0
+                                `)
+				require.Nil(t, err)
+			},
+			shouldPanic: true,
+		},
+		{
+			configFunc: func(configFile string) {
+				f, err := os.Create(configFile)
+				require.Nil(t, err)
+				defer f.Close()
+				_, err = f.WriteString(`
+                                components:
+                                - vault
+                                vault:
+                                  file: vault.yaml
+                                  key:
+                                `)
+				require.Nil(t, err)
+			},
+			shouldPanic: true,
+		},
+		{
+			configFunc: func(configFile string) {
+				f, err := os.Create(configFile)
+				require.Nil(t, err)
+				defer f.Close()
+				_, err = f.WriteString(`
+                                components:
+                                - vault
+                                vault:
+                                  file: vault.yaml
+                                  key: wrong
+                                `)
+				require.Nil(t, err)
+			},
+			shouldPanic: true,
+		},
+		{
+			configFunc: func(configFile string) {
+				f, err := os.Create(configFile)
+				require.Nil(t, err)
+				defer f.Close()
+				_, err = f.WriteString(`
+                                components:
+                                - vault
+                                vault:
+                                  key: AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0
                                   file: test.json
                                 `)
 				require.Nil(t, err)
@@ -161,7 +291,7 @@ func TestReadConfig(t *testing.T) {
                                 components:
                                 - vault
                                 vault:
-                                  key: test
+                                  key: AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0
                                   file: test.json
                                 `)
 				k := koanf.New(".")
@@ -180,7 +310,7 @@ func TestReadConfig(t *testing.T) {
                                 - vault
                                 - dmh
                                 vault:
-                                  key: test
+                                  key: AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0
                                   file: test.json
                                 remote_vault:
                                   client_uuid: test
@@ -196,7 +326,7 @@ func TestReadConfig(t *testing.T) {
                                 - vault
                                 - dmh
                                 vault:
-                                  key: test
+                                  key: AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0
                                   file: test.json
                                 remote_vault:
                                   client_uuid: test
@@ -258,7 +388,7 @@ func TestReadConfigEnv(t *testing.T) {
 				{
 					"DMH_COMPONENTS":  "vault,",
 					"DMH_VAULT__FILE": "vault.json",
-					"DMH_VAULT__KEY":  "test",
+					"DMH_VAULT__KEY":  "AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0",
 				},
 			},
 			expectedKoanf: func() *koanf.Koanf {
@@ -268,7 +398,7 @@ func TestReadConfigEnv(t *testing.T) {
                                   - ""
                                 vault:
                                   file: vault.json
-                                  key: test
+                                  key: AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0
                                 `)
 				k := koanf.New(".")
 				err := k.Load(rawbytes.Provider(b), yaml.Parser())
@@ -310,7 +440,7 @@ func TestReadConfigEnv(t *testing.T) {
 					"DMH_REMOTE_VAULT__URL":         "http://test",
 					"DMH_STATE__FILE":               "state.json",
 					"DMH_VAULT__FILE":               "vault.json",
-					"DMH_VAULT__KEY":                "test",
+					"DMH_VAULT__KEY":                "AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0",
 				},
 			},
 			expectedKoanf: func() *koanf.Koanf {
@@ -325,7 +455,7 @@ func TestReadConfigEnv(t *testing.T) {
                                   file: state.json
                                 vault:
                                   file: vault.json
-                                  key: test
+                                  key: AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0
                                 `)
 				k := koanf.New(".")
 				err := k.Load(rawbytes.Provider(b), yaml.Parser())
