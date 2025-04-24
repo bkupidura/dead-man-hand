@@ -501,6 +501,60 @@ func TestReadConfigEnv(t *testing.T) {
 	}
 }
 
+func TestReadConfigMergeEnvFile(t *testing.T) {
+	configFile := "test_read_config_merge_env_file.yaml"
+	f, err := os.Create(configFile)
+	require.Nil(t, err)
+	defer os.Remove(configFile)
+	defer f.Close()
+	_, err = f.WriteString(`
+        components:
+        - vault
+        - dmh
+        vault:
+          file: test.json
+        remote_vault:
+          client_uuid: test
+          url: http://test
+        state:
+          file: test.json
+        `)
+	require.Nil(t, err)
+
+	err = os.Setenv("DMH_VAULT__KEY", "AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0")
+	defer func() {
+		err = os.Unsetenv("DMH_VAULT__KEY")
+		require.Nil(t, err)
+	}()
+
+	k := readConfig(configFile)
+	marshaledK, err := k.Marshal(yaml.Parser())
+	require.Nil(t, err)
+
+	expectedConfig := []byte(`
+                                components:
+                                - vault
+                                - dmh
+                                vault:
+                                  key: AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0
+                                  file: test.json
+                                remote_vault:
+                                  client_uuid: test
+                                  url: http://test
+                                state:
+                                  file: test.json
+                                `)
+	expectedK := koanf.New(".")
+	err = expectedK.Load(rawbytes.Provider(expectedConfig), yaml.Parser())
+	require.Nil(t, err)
+
+	marshaledExpectedK, err := expectedK.Marshal(yaml.Parser())
+	require.Nil(t, err)
+
+	require.Equal(t, marshaledExpectedK, marshaledK)
+
+}
+
 func TestGetBulkSMSConfig(t *testing.T) {
 	tests := []struct {
 		koanfFunc      func() *koanf.Koanf
