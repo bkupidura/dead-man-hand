@@ -282,3 +282,24 @@ func TestDecryptTamperedData(t *testing.T) {
 	_, err = c.Decrypt(tampered)
 	require.Error(t, err)
 }
+
+func TestDiffKeys(t *testing.T) {
+	c1, err := New("")
+	require.Nil(t, err)
+
+	c2, err := New("")
+	require.Nil(t, err)
+
+	require.NotEqual(t, c1.GetPrivateKey(), c2.GetPrivateKey())
+}
+
+func TestSameKeys(t *testing.T) {
+	c1, err := New("AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0")
+	require.Nil(t, err)
+
+	c2, err := New("AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0")
+	require.Nil(t, err)
+
+	require.Equal(t, c1.GetPrivateKey(), c2.GetPrivateKey())
+	require.Equal(t, "AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0", c1.GetPrivateKey())
+}
