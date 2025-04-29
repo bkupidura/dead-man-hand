@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"dmh/internal/state"
-	"dmh/internal/vault"
 
 	"github.com/stretchr/testify/require"
 )
@@ -42,7 +41,7 @@ func TestDMH(t *testing.T) {
 	defer os.Remove(vaultFile)
 	require.Nil(t, err)
 	defer f.Close()
-	_, err = f.WriteString(fmt.Sprintf(`{"%s":{"last_seen": "2025-03-26T14:55:40.119447+01:00", "secrets": {"9acc344e-a65b-4675-9723-5664c0e73c76": {"key": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBGMDl6R0dQOGQxWUFOS21URENNRklBWVp0R2xMdzM0OGgwTDlOMmJieWxnCnJ4WS9IOUlBYmNvZDNqbm5Ua3d2R2hsemNmL2doQWZ6RjVDS0NUZ0RjTzAKLS0tIEE3UVoyYXh0MjJramFieWZab3Fmc1BSZThISGhkaTVzWmM4L1NQSUlYQ0EKcwoFDL1JXgWw0MQWaoUCRXkZJvghmbKUdDzTkXnsLWKSwvUUOMdHD+of/AUFy7MAuGQ5Pju28/Yfj/w9vAtBPCTC5mmbdTM3/0NLizGH11RZKh2dA2h1LdHRwxLxWvhhO9eBPortK0Tw+Q==", "process_after": 1, "encryption": {"kind": "X25519"}}, "7df7c024-d0a8-4183-83fa-373ea4a7735a": {"key": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBGMDl6R0dQOGQxWUFOS21URENNRklBWVp0R2xMdzM0OGgwTDlOMmJieWxnCnJ4WS9IOUlBYmNvZDNqbm5Ua3d2R2hsemNmL2doQWZ6RjVDS0NUZ0RjTzAKLS0tIEE3UVoyYXh0MjJramFieWZab3Fmc1BSZThISGhkaTVzWmM4L1NQSUlYQ0EKcwoFDL1JXgWw0MQWaoUCRXkZJvghmbKUdDzTkXnsLWKSwvUUOMdHD+of/AUFy7MAuGQ5Pju28/Yfj/w9vAtBPCTC5mmbdTM3/0NLizGH11RZKh2dA2h1LdHRwxLxWvhhO9eBPortK0Tw+Q==", "process_after": 10, "encryption": {"kind": "X25519"}}}}}`, clientUUID))
+	_, err = f.WriteString(fmt.Sprintf(`{"%s":{"last_seen": "2025-03-26T14:55:40.119447+01:00", "secrets": {"9acc344e-a65b-4675-9723-5664c0e73c76": {"key": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBGMDl6R0dQOGQxWUFOS21URENNRklBWVp0R2xMdzM0OGgwTDlOMmJieWxnCnJ4WS9IOUlBYmNvZDNqbm5Ua3d2R2hsemNmL2doQWZ6RjVDS0NUZ0RjTzAKLS0tIEE3UVoyYXh0MjJramFieWZab3Fmc1BSZThISGhkaTVzWmM4L1NQSUlYQ0EKcwoFDL1JXgWw0MQWaoUCRXkZJvghmbKUdDzTkXnsLWKSwvUUOMdHD+of/AUFy7MAuGQ5Pju28/Yfj/w9vAtBPCTC5mmbdTM3/0NLizGH11RZKh2dA2h1LdHRwxLxWvhhO9eBPortK0Tw+Q==", "process_after": 1, "encryption": {"kind": "X25519"}}}}}`, clientUUID))
 	require.Nil(t, err)
 
 	f, err = os.Create(configFile)
@@ -139,10 +138,8 @@ func TestDMH(t *testing.T) {
 	time.Sleep(3 * time.Second)
 
 	// Fetch all secrets from vault, LastSeen is out-of-sync, so everything is released.
-	// First secret was already deleted by execution of 9acc344e-a65b-4675-9723-5664c0e73c76 action.
 	for _, test := range []struct {
 		inputSecretUUID string
-		expectedKey     string
 		expectedCode    int
 	}{
 		{
@@ -151,20 +148,13 @@ func TestDMH(t *testing.T) {
 		},
 		{
 			inputSecretUUID: "7df7c024-d0a8-4183-83fa-373ea4a7735a",
-			expectedKey:     "AGE-SECRET-KEY-1GEUMZFAZD42WGZFGATTTJHV4SURK8LU507QVCAKXKJP6UTFMJTCS0E3QJ4",
-			expectedCode:    http.StatusOK,
+			expectedCode:    http.StatusNotFound,
 		},
 	} {
 		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:8080/api/vault/store/%s/%s", clientUUID, test.inputSecretUUID))
 		require.Nil(t, err)
 		defer resp.Body.Close()
 		require.Equal(t, test.expectedCode, resp.StatusCode)
-		if test.expectedKey != "" {
-			var vaultSecret vault.Secret
-			err = json.NewDecoder(resp.Body).Decode(&vaultSecret)
-			require.Nil(t, err)
-			require.Equal(t, test.expectedKey, vaultSecret.Key)
-		}
 
 	}
 
@@ -228,7 +218,7 @@ func TestDMH(t *testing.T) {
 	// Lets add new Action
 	action = &state.Action{
 		Kind:         "json_post",
-		ProcessAfter: 1,
+		ProcessAfter: 30,
 		Comment:      "never_executed",
 		Data:         `{"url":"http://127.0.0.1:9090/action/never_executed","data":{"key1":"value1","key2":"action/min_interval"},"headers":{"header3":"test1","header4":"test2"},"success_code":[200]}`,
 	}
@@ -299,7 +289,7 @@ func TestDMH(t *testing.T) {
 		},
 		{
 			expectKind:         "json_post",
-			expectProcessAfter: 1,
+			expectProcessAfter: 30,
 			expectComment:      "never_executed",
 			expectProcessed:    0,
 		},
@@ -359,5 +349,29 @@ func TestDMH(t *testing.T) {
 		"/action/min_interval": 2,
 	} {
 		require.Equal(t, v, hitEndpoint[k])
+	}
+
+	// Lets confirrm vault secret lock status
+	time.Sleep(3 * time.Second)
+
+	resp, err = http.Get("http://127.0.0.1:8080/api/action/store")
+	require.Nil(t, err)
+	defer resp.Body.Close()
+	err = json.NewDecoder(resp.Body).Decode(&actions)
+	require.Nil(t, err)
+
+	require.Equal(t, 5, len(actions))
+
+	for _, action := range actions {
+		resp, err = http.Get(fmt.Sprintf("http://127.0.0.1:8080/api/vault/store/%s/%s", clientUUID, action.UUID))
+		require.Nil(t, err)
+		defer resp.Body.Close()
+
+		// never_executed is still not released because of long ProcessAfter, and secret for test and comment is no longer in vault
+		if action.Comment == "never_executed" || action.Comment == "test" || action.Comment == "comment" {
+			require.Equal(t, http.StatusNotFound, resp.StatusCode)
+		} else {
+			require.Equal(t, http.StatusOK, resp.StatusCode)
+		}
 	}
 }
