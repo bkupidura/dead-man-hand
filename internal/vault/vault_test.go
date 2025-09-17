@@ -167,7 +167,7 @@ func TestUpdateLastSeen(t *testing.T) {
 		vaultData, ok := v.data[clientUUID]
 		require.True(t, ok, "expected key %s to exist in the map", clientUUID)
 
-		require.GreaterOrEqual(t, float64(1), time.Now().Sub(vaultData.LastSeen).Seconds())
+		require.GreaterOrEqual(t, float64(1), time.Since(vaultData.LastSeen).Seconds())
 	}
 
 }
