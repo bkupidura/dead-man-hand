@@ -3,7 +3,7 @@
 # Idea
 Dead-Man-Hand will execute pre-added actions when you will no longer be "available".
 
-**All actions are encrypted and when properly configured nobody will be able to get action details till you are alive.**
+**All actions are encrypted and when properly configured nobody will be able to get action details untill you are dead.**
 
 Main goal of `DMH` is to ensure that actions can be executed only when you are dead. And before that time, every action should be confidential - even for people who have access to `DMH`.
 
