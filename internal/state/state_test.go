@@ -168,7 +168,7 @@ func TestUpdateLastSeen(t *testing.T) {
 		savePath: "test_state.json",
 	}
 	s.UpdateLastSeen()
-	require.GreaterOrEqual(t, float64(1), time.Now().Sub(s.data.LastSeen).Seconds())
+	require.GreaterOrEqual(t, float64(1), time.Since(s.data.LastSeen).Seconds())
 }
 
 func TestGetLastSeen(t *testing.T) {
@@ -199,7 +199,7 @@ func TestUpdateActionLastRun(t *testing.T) {
 	require.NotNil(t, err)
 	err = s.UpdateActionLastRun("test")
 	require.Nil(t, err)
-	require.GreaterOrEqual(t, float64(1), time.Now().Sub(s.data.Actions[0].LastRun).Seconds())
+	require.GreaterOrEqual(t, float64(1), time.Since(s.data.Actions[0].LastRun).Seconds())
 }
 
 func TestGetActionLastRun(t *testing.T) {
