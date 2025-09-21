@@ -11,30 +11,49 @@ import (
 )
 
 var (
-	actions = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "dmh_actions",
-		Help: "Number of actions stored in DMMH",
-	}, []string{"processed"})
 	collectInterval     = 10
 	collectIntervalUnit = time.Second
 )
 
 type promCollector struct {
-	chStop chan bool
-	s      state.StateInterface
+	chStop                 chan bool
+	s                      state.StateInterface
+	dmhActions             *prometheus.GaugeVec
+	dmhMissingSecretsTotal *prometheus.CounterVec
 }
 
 // Initialize register prometheus collectors and start collector.
 func Initialize(opts *Options) *promCollector {
-	prometheus.MustRegister(actions)
+	dmhActions := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "dmh_actions",
+		Help: "Number of actions stored in DMH",
+	}, []string{"processed"})
+	dmhMissingSecretsTotal := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "dmh_missing_secrets_total",
+		Help: "Total number of missing secrets detected in the vault during daily validation",
+	}, []string{"action"})
+	if opts != nil && opts.Registry != nil {
+		opts.Registry.MustRegister(dmhActions)
+		opts.Registry.MustRegister(dmhMissingSecretsTotal)
+	} else {
+		prometheus.MustRegister(dmhActions)
+		prometheus.MustRegister(dmhMissingSecretsTotal)
+	}
 
 	p := &promCollector{
-		chStop: make(chan bool),
-		s:      opts.State,
+		chStop:                 make(chan bool),
+		s:                      opts.State,
+		dmhActions:             dmhActions,
+		dmhMissingSecretsTotal: dmhMissingSecretsTotal,
 	}
 
 	go p.collect()
 	return p
+}
+
+// UpdateDMHMissingSecrets increments the dmh_missing_secrets_total counter for a given action uuid by n.
+func (p *promCollector) UpdateDMHMissingSecrets(actionUUID string, n int) {
+	p.dmhMissingSecretsTotal.WithLabelValues(actionUUID).Add(float64(n))
 }
 
 // collect will refresh Prometheus collectors.
@@ -50,7 +69,7 @@ func (p *promCollector) collect() {
 					actionsPerProcessed[a.Processed] += 1
 				}
 				for k, v := range actionsPerProcessed {
-					actions.WithLabelValues(fmt.Sprint(k)).Set(float64(v))
+					p.dmhActions.WithLabelValues(fmt.Sprint(k)).Set(float64(v))
 				}
 			}
 		case <-p.chStop:

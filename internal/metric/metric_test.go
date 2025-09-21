@@ -1,12 +1,15 @@
 package metric
 
 import (
-	"io/ioutil"
+	"fmt"
+	"io"
 	"net/http/httptest"
 	"reflect"
 	"regexp"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 
 	"dmh/internal/state"
 
@@ -82,6 +85,17 @@ func TestInitialize(t *testing.T) {
 	}{
 		{
 			inputOpts: func() *Options {
+				reg := prometheus.NewRegistry()
+				s := new(mockState)
+				return &Options{State: s, Registry: reg}
+			},
+			expectedPromCollector: func() *promCollector {
+				s := new(mockState)
+				return &promCollector{chStop: make(chan bool), s: s}
+			},
+		},
+		{
+			inputOpts: func() *Options {
 				s := new(mockState)
 				return &Options{State: s}
 			},
@@ -93,15 +107,15 @@ func TestInitialize(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		prometheus.Unregister(actions)
 		p := Initialize(test.inputOpts())
 		p.chStop <- true
-		defer func() {
-			prometheus.Unregister(actions)
-		}()
 		expectedP := test.expectedPromCollector()
 		require.Equal(t, expectedP.s, p.s)
 		require.Equal(t, reflect.TypeOf(expectedP.chStop), reflect.TypeOf(p.chStop))
+		require.NotNil(t, p.dmhActions)
+		require.NotNil(t, p.dmhMissingSecretsTotal)
+		require.IsType(t, &prometheus.GaugeVec{}, p.dmhActions)
+		require.IsType(t, &prometheus.CounterVec{}, p.dmhMissingSecretsTotal)
 	}
 }
 
@@ -112,19 +126,21 @@ func TestCollect(t *testing.T) {
 	}{
 		{
 			inputOptions: func() *Options {
-				return &Options{State: nil}
+				reg := prometheus.NewRegistry()
+				return &Options{State: nil, Registry: reg}
 			},
 			expectedRegexp: []*regexp.Regexp{},
 		},
 		{
 			inputOptions: func() *Options {
+				reg := prometheus.NewRegistry()
 				s := new(mockState)
 				s.On("GetActions").Return([]*state.EncryptedAction{
 					{},
 					{},
 					{Processed: 2},
 				})
-				return &Options{State: s}
+				return &Options{State: s, Registry: reg}
 			},
 			expectedRegexp: []*regexp.Regexp{
 				regexp.MustCompile(`dmh_actions{processed="0"} 2`),
@@ -134,13 +150,14 @@ func TestCollect(t *testing.T) {
 		},
 		{
 			inputOptions: func() *Options {
+				reg := prometheus.NewRegistry()
 				s := new(mockState)
 				s.On("GetActions").Return([]*state.EncryptedAction{
 					{Processed: 1},
 					{Processed: 0},
 					{Processed: 2},
 				})
-				return &Options{State: s}
+				return &Options{State: s, Registry: reg}
 			},
 			expectedRegexp: []*regexp.Regexp{
 				regexp.MustCompile(`dmh_actions{processed="0"} 1`),
@@ -155,27 +172,57 @@ func TestCollect(t *testing.T) {
 	}()
 
 	for _, test := range tests {
-		prometheus.Unregister(actions)
-		p := Initialize(test.inputOptions())
-		defer func() {
-			prometheus.Unregister(actions)
-		}()
-
+		opts := test.inputOptions()
+		p := Initialize(opts)
+		go p.collect()
 		time.Sleep(time.Duration(collectInterval*2) * time.Second)
 		p.chStop <- true
 
 		req := httptest.NewRequest("GET", "/metrics", nil)
 		w := httptest.NewRecorder()
-
-		handler := promhttp.Handler()
+		handler := promhttp.HandlerFor(opts.Registry.(prometheus.Gatherer), promhttp.HandlerOpts{})
 		handler.ServeHTTP(w, req)
 
 		resp := w.Result()
-		body, err := ioutil.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
 		require.Nil(t, err)
 
 		for _, r := range test.expectedRegexp {
 			require.True(t, r.MatchString(string(body)))
 		}
+	}
+}
+func TestUpdateDMHMissingSecrets(t *testing.T) {
+	tests := []struct {
+		InputIncrements []int
+		expectedTotal   float64
+	}{
+		{InputIncrements: []int{1}, expectedTotal: 1},
+		{InputIncrements: []int{2, 3}, expectedTotal: 5},
+		{InputIncrements: []int{0}, expectedTotal: 0},
+		{InputIncrements: []int{4, 1, 2}, expectedTotal: 7},
+	}
+
+	for _, test := range tests {
+		opts := &Options{State: nil, Registry: prometheus.NewRegistry()}
+		p := Initialize(opts)
+		actionUUID := uuid.NewString()
+		for _, inc := range test.InputIncrements {
+			p.UpdateDMHMissingSecrets(actionUUID, inc)
+		}
+
+		req := httptest.NewRequest("GET", "/metrics", nil)
+		w := httptest.NewRecorder()
+		handler := promhttp.HandlerFor(opts.Registry.(prometheus.Gatherer), promhttp.HandlerOpts{})
+		handler.ServeHTTP(w, req)
+
+		resp := w.Result()
+		body, err := io.ReadAll(resp.Body)
+		require.Nil(t, err)
+
+		require.Regexp(t,
+			regexp.MustCompile(fmt.Sprintf(`dmh_missing_secrets_total{action="%s"} %v`, actionUUID, test.expectedTotal)),
+			string(body),
+		)
 	}
 }
