@@ -114,8 +114,10 @@ func TestInitialize(t *testing.T) {
 		require.Equal(t, reflect.TypeOf(expectedP.chStop), reflect.TypeOf(p.chStop))
 		require.NotNil(t, p.dmhActions)
 		require.NotNil(t, p.dmhMissingSecretsTotal)
+		require.NotNil(t, p.dmhActionErrorsTotal)
 		require.IsType(t, &prometheus.GaugeVec{}, p.dmhActions)
 		require.IsType(t, &prometheus.CounterVec{}, p.dmhMissingSecretsTotal)
+		require.IsType(t, &prometheus.CounterVec{}, p.dmhActionErrorsTotal)
 	}
 }
 
@@ -194,20 +196,21 @@ func TestCollect(t *testing.T) {
 }
 func TestUpdateDMHMissingSecrets(t *testing.T) {
 	tests := []struct {
-		InputIncrements []int
+		inputIncrements []int
 		expectedTotal   float64
 	}{
-		{InputIncrements: []int{1}, expectedTotal: 1},
-		{InputIncrements: []int{2, 3}, expectedTotal: 5},
-		{InputIncrements: []int{0}, expectedTotal: 0},
-		{InputIncrements: []int{4, 1, 2}, expectedTotal: 7},
+		{inputIncrements: []int{1}, expectedTotal: 1},
+		{inputIncrements: []int{2, 3}, expectedTotal: 5},
+		{inputIncrements: []int{0}, expectedTotal: 0},
+		{inputIncrements: []int{4, 1, 2}, expectedTotal: 7},
 	}
 
 	for _, test := range tests {
 		opts := &Options{State: nil, Registry: prometheus.NewRegistry()}
 		p := Initialize(opts)
 		actionUUID := uuid.NewString()
-		for _, inc := range test.InputIncrements {
+
+		for _, inc := range test.inputIncrements {
 			p.UpdateDMHMissingSecrets(actionUUID, inc)
 		}
 
@@ -222,6 +225,43 @@ func TestUpdateDMHMissingSecrets(t *testing.T) {
 
 		require.Regexp(t,
 			regexp.MustCompile(fmt.Sprintf(`dmh_missing_secrets_total{action="%s"} %v`, actionUUID, test.expectedTotal)),
+			string(body),
+		)
+	}
+}
+
+func TestDMHActionErrorsTotal(t *testing.T) {
+	tests := []struct {
+		inputActionUUID string
+		inputErrorLabel string
+		inputIncrements []int
+		expected        float64
+	}{
+		{uuid.NewString(), "timeout", []int{1, 2}, 3},
+		{uuid.NewString(), "not_found", []int{5}, 5},
+		{uuid.NewString(), "internal", []int{0, 0, 1}, 1},
+	}
+
+	for _, test := range tests {
+		opts := &Options{State: nil, Registry: prometheus.NewRegistry()}
+		p := Initialize(opts)
+
+		for _, inc := range test.inputIncrements {
+			p.UpdateDMHActionErrors(test.inputActionUUID, test.inputErrorLabel, inc)
+		}
+
+		req := httptest.NewRequest("GET", "/metrics", nil)
+		w := httptest.NewRecorder()
+
+		handler := promhttp.HandlerFor(opts.Registry.(prometheus.Gatherer), promhttp.HandlerOpts{})
+		handler.ServeHTTP(w, req)
+
+		resp := w.Result()
+		body, err := io.ReadAll(resp.Body)
+		require.Nil(t, err)
+
+		require.Regexp(t,
+			regexp.MustCompile(fmt.Sprintf(`dmh_action_errors_total{action=\"%s\",error=\"%s\"} %v`, test.inputActionUUID, test.inputErrorLabel, test.expected)),
 			string(body),
 		)
 	}

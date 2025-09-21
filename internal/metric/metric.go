@@ -20,6 +20,7 @@ type promCollector struct {
 	s                      state.StateInterface
 	dmhActions             *prometheus.GaugeVec
 	dmhMissingSecretsTotal *prometheus.CounterVec
+	dmhActionErrorsTotal   *prometheus.CounterVec
 }
 
 // Initialize register prometheus collectors and start collector.
@@ -32,12 +33,18 @@ func Initialize(opts *Options) *promCollector {
 		Name: "dmh_missing_secrets_total",
 		Help: "Total number of missing secrets detected in the vault during daily validation",
 	}, []string{"action"})
+	dmhActionErrorsTotal := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "dmh_action_errors_total",
+		Help: "Total number of action errors",
+	}, []string{"action", "error"})
 	if opts != nil && opts.Registry != nil {
 		opts.Registry.MustRegister(dmhActions)
 		opts.Registry.MustRegister(dmhMissingSecretsTotal)
+		opts.Registry.MustRegister(dmhActionErrorsTotal)
 	} else {
 		prometheus.MustRegister(dmhActions)
 		prometheus.MustRegister(dmhMissingSecretsTotal)
+		prometheus.MustRegister(dmhActionErrorsTotal)
 	}
 
 	p := &promCollector{
@@ -45,6 +52,7 @@ func Initialize(opts *Options) *promCollector {
 		s:                      opts.State,
 		dmhActions:             dmhActions,
 		dmhMissingSecretsTotal: dmhMissingSecretsTotal,
+		dmhActionErrorsTotal:   dmhActionErrorsTotal,
 	}
 
 	go p.collect()
@@ -54,6 +62,11 @@ func Initialize(opts *Options) *promCollector {
 // UpdateDMHMissingSecrets increments the dmh_missing_secrets_total counter for a given action uuid by n.
 func (p *promCollector) UpdateDMHMissingSecrets(actionUUID string, n int) {
 	p.dmhMissingSecretsTotal.WithLabelValues(actionUUID).Add(float64(n))
+}
+
+// UpdateDMHActionErrors increments the dmh_action_errors_total counter for a given action uuid and error label by n.
+func (p *promCollector) UpdateDMHActionErrors(actionUUID, errorLabel string, n int) {
+	p.dmhActionErrorsTotal.WithLabelValues(actionUUID, errorLabel).Add(float64(n))
 }
 
 // collect will refresh Prometheus collectors.
