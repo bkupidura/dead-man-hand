@@ -81,7 +81,7 @@ func (m *mockState) GetActionLastRun(uuid string) (time.Time, error) {
 func TestInitialize(t *testing.T) {
 	tests := []struct {
 		inputOpts             func() *Options
-		expectedPromCollector func() *promCollector
+		expectedPromCollector func() *PromCollector
 	}{
 		{
 			inputOpts: func() *Options {
@@ -89,9 +89,9 @@ func TestInitialize(t *testing.T) {
 				s := new(mockState)
 				return &Options{State: s, Registry: reg}
 			},
-			expectedPromCollector: func() *promCollector {
+			expectedPromCollector: func() *PromCollector {
 				s := new(mockState)
-				return &promCollector{chStop: make(chan bool), s: s}
+				return &PromCollector{chStop: make(chan bool), s: s}
 			},
 		},
 		{
@@ -99,9 +99,9 @@ func TestInitialize(t *testing.T) {
 				s := new(mockState)
 				return &Options{State: s}
 			},
-			expectedPromCollector: func() *promCollector {
+			expectedPromCollector: func() *PromCollector {
 				s := new(mockState)
-				return &promCollector{chStop: make(chan bool), s: s}
+				return &PromCollector{chStop: make(chan bool), s: s}
 			},
 		},
 	}

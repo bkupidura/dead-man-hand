@@ -15,7 +15,7 @@ var (
 	collectIntervalUnit = time.Second
 )
 
-type promCollector struct {
+type PromCollector struct {
 	chStop                 chan bool
 	s                      state.StateInterface
 	dmhActions             *prometheus.GaugeVec
@@ -24,7 +24,7 @@ type promCollector struct {
 }
 
 // Initialize register prometheus collectors and start collector.
-func Initialize(opts *Options) *promCollector {
+func Initialize(opts *Options) *PromCollector {
 	dmhActions := prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "dmh_actions",
 		Help: "Number of actions stored in DMH",
@@ -47,7 +47,7 @@ func Initialize(opts *Options) *promCollector {
 		prometheus.MustRegister(dmhActionErrorsTotal)
 	}
 
-	p := &promCollector{
+	p := &PromCollector{
 		chStop:                 make(chan bool),
 		s:                      opts.State,
 		dmhActions:             dmhActions,
@@ -60,17 +60,17 @@ func Initialize(opts *Options) *promCollector {
 }
 
 // UpdateDMHMissingSecrets increments the dmh_missing_secrets_total counter for a given action uuid by n.
-func (p *promCollector) UpdateDMHMissingSecrets(actionUUID string, n int) {
+func (p *PromCollector) UpdateDMHMissingSecrets(actionUUID string, n int) {
 	p.dmhMissingSecretsTotal.WithLabelValues(actionUUID).Add(float64(n))
 }
 
 // UpdateDMHActionErrors increments the dmh_action_errors_total counter for a given action uuid and error label by n.
-func (p *promCollector) UpdateDMHActionErrors(actionUUID, errorLabel string, n int) {
+func (p *PromCollector) UpdateDMHActionErrors(actionUUID, errorLabel string, n int) {
 	p.dmhActionErrorsTotal.WithLabelValues(actionUUID, errorLabel).Add(float64(n))
 }
 
 // collect will refresh Prometheus collectors.
-func (p *promCollector) collect() {
+func (p *PromCollector) collect() {
 	log.Printf("starting prometheus collector")
 	ticker := time.NewTicker(time.Duration(collectInterval) * collectIntervalUnit)
 	for {

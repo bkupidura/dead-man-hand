@@ -5,14 +5,20 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"net/http/httptest"
 	"os"
+	"regexp"
 	"testing"
 	"time"
 
 	"dmh/internal/execute"
+	"dmh/internal/metric"
 	"dmh/internal/state"
 	"dmh/internal/vault"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
@@ -331,6 +337,7 @@ func TestDispatcher(t *testing.T) {
 		expectedActions      func() []*state.EncryptedAction
 		expectedStateCalls   map[string]int
 		expectedExecuteCalls map[string]int
+		expectedMetrics      []string
 	}{
 		{
 			inputState: func() state.StateInterface {
@@ -386,6 +393,9 @@ func TestDispatcher(t *testing.T) {
 				"GetLastSeen":      1,
 				"GetActionLastRun": 1,
 			},
+			expectedMetrics: []string{
+				`dmh_action_errors_total{action="test-uuid",error="GetActionLastRun"} 1`,
+			},
 		},
 		{
 			inputState: func() state.StateInterface {
@@ -411,6 +421,9 @@ func TestDispatcher(t *testing.T) {
 				"GetLastSeen":      1,
 				"GetActionLastRun": 1,
 				"DecryptAction":    1,
+			},
+			expectedMetrics: []string{
+				`dmh_action_errors_total{action="test-uuid",error="DecryptAction"} 1`,
 			},
 		},
 		{
@@ -441,6 +454,9 @@ func TestDispatcher(t *testing.T) {
 			},
 			expectedExecuteCalls: map[string]int{
 				"Run": 1,
+			},
+			expectedMetrics: []string{
+				`dmh_action_errors_total{action="test-uuid",error="Run"} 1`,
 			},
 		},
 		{
@@ -480,6 +496,9 @@ func TestDispatcher(t *testing.T) {
 			},
 			expectedExecuteCalls: map[string]int{
 				"Run": 1,
+			},
+			expectedMetrics: []string{
+				`dmh_action_errors_total{action="test-uuid",error="UpdateActionLastRun"} 1`,
 			},
 		},
 		{
@@ -528,6 +547,9 @@ func TestDispatcher(t *testing.T) {
 			},
 			expectedExecuteCalls: map[string]int{
 				"Run": 1,
+			},
+			expectedMetrics: []string{
+				`dmh_action_errors_total{action="test-uuid",error="MarkActionAsProcessed"} 1`,
 			},
 		},
 		{
@@ -634,8 +656,10 @@ func TestDispatcher(t *testing.T) {
 	for _, test := range tests {
 		s := test.inputState()
 		e := test.inputExecute()
+		mOpts := &metric.Options{State: s, Registry: prometheus.NewRegistry()}
+		m := metric.Initialize(mOpts)
 		chStop := make(chan bool)
-		go dispatcher(s, e, time.Second, chStop)
+		go dispatcher(s, e, m, time.Second, chStop)
 		time.Sleep(time.Duration(3) * getActionsIntervalUnit)
 		chStop <- true
 		if test.expectedActions != nil {
@@ -650,6 +674,19 @@ func TestDispatcher(t *testing.T) {
 			for k, v := range test.expectedExecuteCalls {
 				e.(*mockExecute).AssertNumberOfCalls(t, k, v)
 			}
+		}
+
+		req := httptest.NewRequest("GET", "/metrics", nil)
+		w := httptest.NewRecorder()
+
+		handler := promhttp.HandlerFor(mOpts.Registry.(prometheus.Gatherer), promhttp.HandlerOpts{})
+		handler.ServeHTTP(w, req)
+
+		resp := w.Result()
+		body, err := io.ReadAll(resp.Body)
+		require.Nil(t, err)
+		for _, expectedMetric := range test.expectedMetrics {
+			require.Regexp(t, regexp.MustCompile(expectedMetric), string(body))
 		}
 	}
 }

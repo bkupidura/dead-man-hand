@@ -374,4 +374,16 @@ func TestDMH(t *testing.T) {
 			require.Equal(t, http.StatusOK, resp.StatusCode)
 		}
 	}
+
+	resp, err = http.Get("http://127.0.0.1:8080/metrics")
+	require.Nil(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	require.Nil(t, err)
+
+	require.Contains(t, string(body), `dmh_actions{processed="0"} 2`)
+	require.Contains(t, string(body), `dmh_actions{processed="1"} 0`)
+	require.Contains(t, string(body), `dmh_actions{processed="2"} 3`)
 }
