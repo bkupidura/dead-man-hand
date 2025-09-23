@@ -35,6 +35,30 @@ func (m *mockCrypt) GetPrivateKey() string {
 	return args.String(0)
 }
 
+type failWriter struct {
+	mock.Mock
+}
+
+func (f *failWriter) Write(p []byte) (n int, err error) {
+	args := f.Called(p)
+	return args.Int(0), args.Error(1)
+}
+func (f *failWriter) Close() error {
+	args := f.Called()
+	return args.Error(0)
+}
+
+type failFile struct {
+	*failWriter
+}
+
+func (f *failFile) Write(p []byte) (n int, err error) {
+	return f.failWriter.Write(p)
+}
+func (f *failFile) Close() error {
+	return f.failWriter.Close()
+}
+
 func TestNew(t *testing.T) {
 	tests := []struct {
 		inputOptions  *Options
@@ -1549,7 +1573,7 @@ func TestSave(t *testing.T) {
 	tests := []struct {
 		inputActions []*EncryptedAction
 		expectedData string
-		mockOsCreate func(string) (*os.File, error)
+		mockOsCreate func(string) (io.WriteCloser, error)
 		shouldPanic  bool
 	}{
 		{
@@ -1565,8 +1589,18 @@ func TestSave(t *testing.T) {
 					Processed: 1,
 				},
 			},
-			mockOsCreate: func(string) (*os.File, error) { return nil, fmt.Errorf("mockOsCreate error") },
+			mockOsCreate: func(string) (io.WriteCloser, error) { return nil, fmt.Errorf("mockOsCreate error") },
 			shouldPanic:  true,
+		},
+		{
+			inputActions: []*EncryptedAction{},
+			mockOsCreate: func(string) (io.WriteCloser, error) {
+				fw := &failWriter{}
+				fw.On("Write", mock.Anything).Return(0, fmt.Errorf("failWriter error"))
+				fw.On("Close").Return(nil)
+				return &failFile{fw}, nil
+			},
+			shouldPanic: true,
 		},
 		{
 			inputActions: []*EncryptedAction{
@@ -1594,9 +1628,12 @@ func TestSave(t *testing.T) {
 			expectedData: `{"last_seen":"2025-03-26T14:55:40.119447+01:00","actions":[{"kind":"mail","process_after":20,"min_interval":0,"comment":"test","data":"encrypted","uuid":"test","processed":1,"last_run":"0001-01-01T00:00:00Z","encryption":{"kind":"","vault_url":""}},{"kind":"mail","process_after":20,"min_interval":0,"comment":"test","data":"encrypted2","uuid":"test2","processed":0,"last_run":"0001-01-01T00:00:00Z","encryption":{"kind":"","vault_url":""}}]}` + "\n",
 		},
 	}
-
+	oldOsCreate := osCreate
 	for _, test := range tests {
-		osCreate = os.Create
+		osCreate = oldOsCreate
+		defer func() {
+			osCreate = oldOsCreate
+		}()
 		if test.mockOsCreate != nil {
 			osCreate = test.mockOsCreate
 		}

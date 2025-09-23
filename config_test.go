@@ -655,6 +655,23 @@ func TestGetMailConfig(t *testing.T) {
 		},
 		{
 			koanfFunc: func() *koanf.Koanf {
+				b := []byte(`execute:
+  plugin:
+    mail:
+      tls_insecure:
+        - not
+        - a
+        - bool
+`)
+				k := koanf.New(".")
+				err := k.Load(rawbytes.Provider(b), yaml.Parser())
+				require.Nil(t, err)
+				return k
+			},
+			shouldPanic: true,
+		},
+		{
+			koanfFunc: func() *koanf.Koanf {
 				b := []byte(`
                                 execute:
                                   plugin:
@@ -682,9 +699,16 @@ func TestGetMailConfig(t *testing.T) {
 	for _, test := range tests {
 		k := test.koanfFunc()
 		if test.shouldPanic {
-			require.Panics(t, func() {
-				getBulkSMSConfig(k)
-			})
+			didPanic := false
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						didPanic = true
+					}
+				}()
+				getMailConfig(k)
+			}()
+			require.True(t, didPanic, "expected panic but did not get one")
 		} else {
 			config := getMailConfig(k)
 			require.Equal(t, test.expectedConfig, config)

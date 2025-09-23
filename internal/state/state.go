@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -19,7 +20,7 @@ import (
 var (
 	// mocks for tests
 	cryptNew    = crypt.New
-	osCreate    = os.Create
+	osCreate    = func(name string) (io.WriteCloser, error) { return os.Create(name) }
 	jsonMarshal = json.Marshal
 )
 

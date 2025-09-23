@@ -137,7 +137,7 @@ func TestDMH(t *testing.T) {
 	// Lets give alive probe some time to run
 	time.Sleep(3 * time.Second)
 
-	// Fetch all secrets from vault, LastSeen is out-of-sync, so everything is released.
+	// Fetch secrets uuids we know
 	for _, test := range []struct {
 		inputSecretUUID string
 		expectedCode    int
@@ -302,6 +302,11 @@ func TestDMH(t *testing.T) {
 		require.Equal(t, test.expectMinInterval, actions[i].MinInterval)
 		require.Equal(t, test.expectComment, actions[i].Comment)
 		require.Equal(t, test.expectProcessed, actions[i].Processed)
+	}
+
+	// Lets check if every action has proper vault url
+	for _, action := range actions {
+		require.Equal(t, fmt.Sprintf("http://127.0.0.1:8080/api/vault/store/%s/%s", clientUUID, action.UUID), action.EncryptionMeta.VaultURL)
 	}
 
 	// Lets check that vault locked all secrets as we updated LastSeen.

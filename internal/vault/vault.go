@@ -3,6 +3,7 @@ package vault
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"time"
@@ -12,7 +13,7 @@ import (
 
 var (
 	// mocks for tests
-	osCreate = os.Create
+	osCreate = func(name string) (io.WriteCloser, error) { return os.Create(name) }
 	cryptNew = crypt.New
 )
 

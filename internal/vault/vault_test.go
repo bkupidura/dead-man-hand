@@ -2,6 +2,7 @@ package vault
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"testing"
 	"time"
@@ -29,6 +30,30 @@ func (m *mockCrypt) Decrypt(data string) (string, error) {
 func (m *mockCrypt) GetPrivateKey() string {
 	args := m.Called()
 	return args.String(0)
+}
+
+type failWriter struct {
+	mock.Mock
+}
+
+func (f *failWriter) Write(p []byte) (n int, err error) {
+	args := f.Called(p)
+	return args.Int(0), args.Error(1)
+}
+func (f *failWriter) Close() error {
+	args := f.Called()
+	return args.Error(0)
+}
+
+type failFile struct {
+	*failWriter
+}
+
+func (f *failFile) Write(p []byte) (n int, err error) {
+	return f.failWriter.Write(p)
+}
+func (f *failFile) Close() error {
+	return f.failWriter.Close()
 }
 
 func TestNew(t *testing.T) {
@@ -965,7 +990,7 @@ func TestSave(t *testing.T) {
 	tests := []struct {
 		inputData    func() map[string]*VaultData
 		expectedData string
-		mockOsCreate func(string) (*os.File, error)
+		mockOsCreate func(string) (io.WriteCloser, error)
 		shouldPanic  bool
 	}{
 		{
@@ -991,7 +1016,7 @@ func TestSave(t *testing.T) {
 				}
 				return d
 			},
-			mockOsCreate: func(string) (*os.File, error) { return nil, fmt.Errorf("mockOsCreate error") },
+			mockOsCreate: func(string) (io.WriteCloser, error) { return nil, fmt.Errorf("mockOsCreate error") },
 			shouldPanic:  true,
 		},
 		{
@@ -1029,10 +1054,25 @@ func TestSave(t *testing.T) {
 			},
 			expectedData: `{"testClientUUID":{"last_seen":"2025-03-26T14:55:40.119447+01:00","secrets":{"testSecret1":{"key":"encrypted","process_after":10,"encryption":{"kind":"X25519"}},"testSecret2":{"key":"encrypted2","process_after":10,"encryption":{"kind":"X25519"}}}},"testClientUUID2":{"last_seen":"2025-03-26T14:55:40.119447+01:00","secrets":{"testSecret3":{"key":"encrypted3","process_after":10,"encryption":{"kind":"X25519"}}}}}` + "\n",
 		},
+		{
+			inputData: func() map[string]*VaultData {
+				return map[string]*VaultData{"fail": {Secrets: map[string]*Secret{}}}
+			},
+			mockOsCreate: func(string) (io.WriteCloser, error) {
+				fw := &failWriter{}
+				fw.On("Write", mock.Anything).Return(0, fmt.Errorf("failWriter error"))
+				fw.On("Close").Return(nil)
+				return &failFile{fw}, nil
+			},
+			shouldPanic: true,
+		},
 	}
-
+	oldOsCreate := osCreate
 	for _, test := range tests {
-		osCreate = os.Create
+		osCreate = oldOsCreate
+		defer func() {
+			osCreate = oldOsCreate
+		}()
 		if test.mockOsCreate != nil {
 			osCreate = test.mockOsCreate
 		}
