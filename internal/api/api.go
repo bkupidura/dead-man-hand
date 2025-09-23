@@ -55,6 +55,14 @@ func StatusErrNotFound(err error) render.Renderer {
 	}
 }
 
+// StatusErrLocked returns Locked.
+func StatusErrLocked(err error) render.Renderer {
+	return &ErrResponse{
+		HTTPStatusCode: http.StatusLocked,
+		StatusText:     "Resource is locked.",
+	}
+}
+
 // OKResponse is generic ok code struct.
 type OKResponse struct {
 	HTTPStatusCode int    `json:"-"`
@@ -291,6 +299,11 @@ func getVaultSecretHandler(v vault.VaultInterface) func(http.ResponseWriter, *ht
 		paramSecretUUID := chi.URLParam(r, "secretUUID")
 		s, err := v.GetSecret(paramClientUUID, paramSecretUUID)
 		if err != nil {
+			if err.Error() == fmt.Sprintf("secret %s/%s is not released yet", paramClientUUID, paramSecretUUID) {
+				log.Printf("secret %s/%s is not released yet", paramClientUUID, paramSecretUUID)
+				render.Render(w, r, StatusErrLocked(nil))
+				return
+			}
 			log.Printf("unable to get vault secret: %s", err)
 			render.Render(w, r, StatusErrNotFound(nil))
 			return

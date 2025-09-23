@@ -310,7 +310,11 @@ func TestDMH(t *testing.T) {
 		require.Nil(t, err)
 		defer resp.Body.Close()
 
-		require.Equal(t, http.StatusNotFound, resp.StatusCode)
+		if action.Processed == 2 {
+			require.Equal(t, http.StatusNotFound, resp.StatusCode)
+		} else {
+			require.Equal(t, http.StatusLocked, resp.StatusCode)
+		}
 	}
 
 	// Lets fetch single action
@@ -367,11 +371,12 @@ func TestDMH(t *testing.T) {
 		require.Nil(t, err)
 		defer resp.Body.Close()
 
-		// never_executed is still not released because of long ProcessAfter, and secret for test and comment is no longer in vault
-		if action.Comment == "never_executed" || action.Comment == "test" || action.Comment == "comment" {
+		if action.Processed == 2 {
 			require.Equal(t, http.StatusNotFound, resp.StatusCode)
-		} else {
+		} else if action.MinInterval > 0 {
 			require.Equal(t, http.StatusOK, resp.StatusCode)
+		} else if action.Processed == 0 {
+			require.Equal(t, http.StatusLocked, resp.StatusCode)
 		}
 	}
 

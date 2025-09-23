@@ -14,6 +14,10 @@ def http_not_found():
     return {"statusCode": 404, "body": "Not Found"}
 
 
+def http_locked():
+    return {"statusCode": 423, "body": "Locked"}
+
+
 def http_ok(data):
     return {"statusCode": 200, "body": json.dumps(data)}
 
@@ -62,7 +66,7 @@ def lambda_handler(event, context):
                 return http_not_found()
 
             if now - last_seen <= secret["processAfter"] * process_after_unit:
-                return http_not_found()
+                return http_locked()
 
             if method == "GET":
                 return http_ok(

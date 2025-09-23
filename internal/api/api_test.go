@@ -723,6 +723,17 @@ func TestGetVaultSecretHandler(t *testing.T) {
 			inputSecretUUID: "secret-uuid",
 			mockVaultFunc: func() vault.VaultInterface {
 				v := new(mockVault)
+				v.On("GetSecret", "client-uuid", "secret-uuid").Return(nil, fmt.Errorf("secret client-uuid/secret-uuid is not released yet"))
+				return v
+			},
+			expectedCode:     http.StatusLocked,
+			expectedResponse: nil,
+		},
+		{
+			inputClientUUID: "client-uuid",
+			inputSecretUUID: "secret-uuid",
+			mockVaultFunc: func() vault.VaultInterface {
+				v := new(mockVault)
 				v.On("GetSecret", "client-uuid", "secret-uuid").Return(&vault.Secret{Key: "test", ProcessAfter: 10}, nil)
 				return v
 			},

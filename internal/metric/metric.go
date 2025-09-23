@@ -3,6 +3,7 @@ package metric
 import (
 	"fmt"
 	"log"
+	"net/http"
 	"time"
 
 	"dmh/internal/state"
@@ -13,10 +14,13 @@ import (
 var (
 	collectInterval     = 10
 	collectIntervalUnit = time.Second
+	collectSlowInterval = 12
+	collectSlowUnit     = time.Hour
 )
 
 type PromCollector struct {
 	chStop                 chan bool
+	chSlowStop             chan bool
 	s                      state.StateInterface
 	dmhActions             *prometheus.GaugeVec
 	dmhMissingSecretsTotal *prometheus.CounterVec
@@ -49,6 +53,7 @@ func Initialize(opts *Options) *PromCollector {
 
 	p := &PromCollector{
 		chStop:                 make(chan bool),
+		chSlowStop:             make(chan bool),
 		s:                      opts.State,
 		dmhActions:             dmhActions,
 		dmhMissingSecretsTotal: dmhMissingSecretsTotal,
@@ -56,12 +61,8 @@ func Initialize(opts *Options) *PromCollector {
 	}
 
 	go p.collect()
+	go p.collectSlow()
 	return p
-}
-
-// UpdateDMHMissingSecrets increments the dmh_missing_secrets_total counter for a given action uuid by n.
-func (p *PromCollector) UpdateDMHMissingSecrets(actionUUID string, n int) {
-	p.dmhMissingSecretsTotal.WithLabelValues(actionUUID).Add(float64(n))
 }
 
 // UpdateDMHActionErrors increments the dmh_action_errors_total counter for a given action uuid and error label by n.
@@ -69,13 +70,13 @@ func (p *PromCollector) UpdateDMHActionErrors(actionUUID, errorLabel string, n i
 	p.dmhActionErrorsTotal.WithLabelValues(actionUUID, errorLabel).Add(float64(n))
 }
 
-// collect will refresh Prometheus collectors.
+// collect will refresh Prometheus collectors (regular interval).
 func (p *PromCollector) collect() {
 	log.Printf("starting prometheus collector")
-	ticker := time.NewTicker(time.Duration(collectInterval) * collectIntervalUnit)
+	collectTicker := time.NewTicker(time.Duration(collectInterval) * collectIntervalUnit)
 	for {
 		select {
-		case <-ticker.C:
+		case <-collectTicker.C:
 			if p.s != nil {
 				actionsPerProcessed := map[int]int{0: 0, 1: 0, 2: 0}
 				for _, a := range p.s.GetActions() {
@@ -86,6 +87,45 @@ func (p *PromCollector) collect() {
 				}
 			}
 		case <-p.chStop:
+			return
+		}
+	}
+}
+
+// collectSlow will refresh Prometheus collectors (slow interval).
+func (p *PromCollector) collectSlow() {
+	log.Printf("starting prometheus slow collector")
+	collectSlowTicker := time.NewTicker(time.Duration(collectSlowInterval) * collectSlowUnit)
+	for {
+		select {
+		case <-collectSlowTicker.C:
+			if p.s != nil {
+				for _, a := range p.s.GetActions() {
+					if a.Processed == 2 {
+						continue
+					}
+					secretUrl := a.EncryptionMeta.VaultURL
+					if secretUrl == "" {
+						p.dmhMissingSecretsTotal.WithLabelValues(a.UUID).Add(1)
+						continue
+					}
+
+					client := http.Client{
+						Timeout: 3 * time.Second,
+					}
+					reg, err := client.Get(secretUrl)
+
+					if err != nil {
+						p.dmhMissingSecretsTotal.WithLabelValues(a.UUID).Add(1)
+						continue
+					}
+					if reg.StatusCode != http.StatusOK && reg.StatusCode != http.StatusLocked {
+						p.dmhMissingSecretsTotal.WithLabelValues(a.UUID).Add(1)
+						continue
+					}
+				}
+			}
+		case <-p.chSlowStop:
 			return
 		}
 	}
