@@ -849,6 +849,16 @@ func TestDeleteVaultSecretHandler(t *testing.T) {
 			inputSecretUUID: "secret-uuid",
 			mockVaultFunc: func() vault.VaultInterface {
 				v := new(mockVault)
+				v.On("DeleteSecret", "client-uuid", "secret-uuid").Return(fmt.Errorf("secret client-uuid/secret-uuid is not released yet"))
+				return v
+			},
+			expectedCode: http.StatusLocked,
+		},
+		{
+			inputClientUUID: "client-uuid",
+			inputSecretUUID: "secret-uuid",
+			mockVaultFunc: func() vault.VaultInterface {
+				v := new(mockVault)
 				v.On("DeleteSecret", "client-uuid", "secret-uuid").Return(nil)
 				return v
 			},

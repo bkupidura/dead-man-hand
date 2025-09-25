@@ -299,12 +299,11 @@ func getVaultSecretHandler(v vault.VaultInterface) func(http.ResponseWriter, *ht
 		paramSecretUUID := chi.URLParam(r, "secretUUID")
 		s, err := v.GetSecret(paramClientUUID, paramSecretUUID)
 		if err != nil {
+			log.Printf("unable to get vault secret: %s", err)
 			if err.Error() == fmt.Sprintf("secret %s/%s is not released yet", paramClientUUID, paramSecretUUID) {
-				log.Printf("secret %s/%s is not released yet", paramClientUUID, paramSecretUUID)
 				render.Render(w, r, StatusErrLocked(nil))
 				return
 			}
-			log.Printf("unable to get vault secret: %s", err)
 			render.Render(w, r, StatusErrNotFound(nil))
 			return
 		}
@@ -335,6 +334,10 @@ func deleteVaultSecretHandler(v vault.VaultInterface) func(http.ResponseWriter, 
 		err := v.DeleteSecret(paramClientUUID, paramSecretUUID)
 		if err != nil {
 			log.Printf("unable to delete secret: %s", err)
+			if err.Error() == fmt.Sprintf("secret %s/%s is not released yet", paramClientUUID, paramSecretUUID) {
+				render.Render(w, r, StatusErrLocked(nil))
+				return
+			}
 			render.Render(w, r, StatusErrNotFound(nil))
 			return
 		}

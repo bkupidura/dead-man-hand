@@ -26,6 +26,7 @@ test:
 vet:
 	go fmt ./...
 	go vet ./...
+	go mod tidy
 
 # Help target
 .PHONY: help

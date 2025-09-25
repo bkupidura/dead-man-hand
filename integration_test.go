@@ -34,7 +34,7 @@ func TestDMH(t *testing.T) {
 	defer os.Remove(stateFile)
 	require.Nil(t, err)
 	defer f.Close()
-	_, err = f.WriteString(fmt.Sprintf(`{"last_seen":"2025-03-26T14:55:40.119447+01:00","actions":[{"uuid":"9acc344e-a65b-4675-9723-5664c0e73c76","kind":"json_post","data":"YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSAvb2JISGVZS3lEcmlsenlaeUFnbHRDYjJTK1FLSVdLSWkvYjhwSjRXeEg4CmxNT0YrVCtjNUZRWi9HS2d4MFFiN3AwVDlRc0k1eVJsbXBqWHhMRFhTWE0KLS0tIE12NktMSlVGVC9LMlpTRGFjZ2FRVXhpcEJjdmwyUExCL2tGaGJtZFhyc1UKfx25yewZmc6eVeuX7ufIN2vmFR/hXldbY1LW1UwNMH/AqPToZ2ZKTYdqhA7+ZtF8mOyduvsLVX1siaatb0VC4kmGdIr2DiPlVyCbcGNwTgNqjPs5RNkcqQB9DITQPfGdmGRh3OP3t16FFT91zVWDRDRVbFnSEKfeusg33wDHlsd1E99RrVPAK5TpT6wGykDCCW66Xwh8YNYkFb4s2f0PSIsE/r7bxR4mq1VNbBuV0eRo5uz9WAiR7NyH","process_after":1,"comment":"","processed":0, "encryption": {"kind":"X25519","vault_url":"http://127.0.0.1:8080/api/vault/store/%s/9acc344e-a65b-4675-9723-5664c0e73c76"}},{"uuid":"7df7c024-d0a8-4183-83fa-373ea4a7735a","kind":"json_post","data":"YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBJSmIxTlBZZ1dqZlVqY2RBTjg1YjRlWEVCNjFXMFVac0EwdWczVXYxblZ3CmFPNjl5THJ6Q0ZxaGdxU2RmZlBUdXdwVjJ2ajNoSUxPSitxYStFSVBMOTQKLS0tIExpQVFsZ1p6Vy9TWVllY1NUYmt4M1BrZGV6Yk5mUkNhQURFRUhaU3BCazgKeLCm87tFZiyWy1pBgfmZnrNK/BygpARjcOz30EeA7pUnS3bAleWKsOoO+mOrYUXt4FxvS8s7botqWYvqJBU18ctHRZshxQLaz5q240EsOsBWGvxZN1rn1SonO5DsBxxrPvJJmbyI47lXpaScrnSE1eotvgt0zWDc58kkgMGgBxiMYjqQXdFylwp5WU+Q9JThCakt+QsQP9X5MRvPfPWOg9a9Kw==","process_after":10,"comment":"test","processed":2, "encryption": {"kind":"X25519","vault_url":"http://127.0.0.1:8080/api/vault/store/%s/7df7c024-d0a8-4183-83fa-373ea4a7735a"}}]}`, clientUUID, clientUUID))
+	_, err = f.WriteString(fmt.Sprintf(`{"last_seen":"2025-03-26T14:55:40.119447+01:00","actions":[{"kind":"json_post","process_after":1,"min_interval":0,"comment":"missing-encryoption-key-from-vault","data":"YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBMUktTQjM0bFJOTDhWa05JcHdLUzM4dlBXRVQ2eklSdmdrenh4ejRJVHlJClRMWWJnZ1JaKzdTSG5QeFREZVRYdXRjWjFRa3ZLRE9ZY2NkRVo2TytrdGMKLS0tIDNoMWtzeXpiQ1JWKy9ZbHhqeHJuMjYxR2NlblZkZlIwRWRzOUJCNDZPNXcK+D+heGeg32Eym2D3wQU0evdTvRzmGvbw8cf5ukIwYyKINpu4raClZKgn5sfb4pkgqxYR+TaF4oBW3D9Jt0cZMRn5mL7pOWxDgvLMkhES3hk6U0Nfu+9SKODtipqPQubJw4gHDrw3INYjK5jVNYVcITjXzHbBMTiaZD7jNCmPH20Xrw==","uuid":"bf577b9d-26f4-4168-b8e4-0e1d692559ed","processed":0,"last_run":"0001-01-01T00:00:00Z","encryption":{"kind":"X25519","vault_url":"http://127.0.0.1:8080/api/vault/store/%s/bf577b9d-26f4-4168-b8e4-0e1d692559ed"}},{"uuid":"9acc344e-a65b-4675-9723-5664c0e73c76","kind":"json_post","data":"YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSAvb2JISGVZS3lEcmlsenlaeUFnbHRDYjJTK1FLSVdLSWkvYjhwSjRXeEg4CmxNT0YrVCtjNUZRWi9HS2d4MFFiN3AwVDlRc0k1eVJsbXBqWHhMRFhTWE0KLS0tIE12NktMSlVGVC9LMlpTRGFjZ2FRVXhpcEJjdmwyUExCL2tGaGJtZFhyc1UKfx25yewZmc6eVeuX7ufIN2vmFR/hXldbY1LW1UwNMH/AqPToZ2ZKTYdqhA7+ZtF8mOyduvsLVX1siaatb0VC4kmGdIr2DiPlVyCbcGNwTgNqjPs5RNkcqQB9DITQPfGdmGRh3OP3t16FFT91zVWDRDRVbFnSEKfeusg33wDHlsd1E99RrVPAK5TpT6wGykDCCW66Xwh8YNYkFb4s2f0PSIsE/r7bxR4mq1VNbBuV0eRo5uz9WAiR7NyH","process_after":1,"comment":"","processed":0, "encryption": {"kind":"X25519","vault_url":"http://127.0.0.1:8080/api/vault/store/%s/9acc344e-a65b-4675-9723-5664c0e73c76"}},{"uuid":"7df7c024-d0a8-4183-83fa-373ea4a7735a","kind":"json_post","data":"YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBJSmIxTlBZZ1dqZlVqY2RBTjg1YjRlWEVCNjFXMFVac0EwdWczVXYxblZ3CmFPNjl5THJ6Q0ZxaGdxU2RmZlBUdXdwVjJ2ajNoSUxPSitxYStFSVBMOTQKLS0tIExpQVFsZ1p6Vy9TWVllY1NUYmt4M1BrZGV6Yk5mUkNhQURFRUhaU3BCazgKeLCm87tFZiyWy1pBgfmZnrNK/BygpARjcOz30EeA7pUnS3bAleWKsOoO+mOrYUXt4FxvS8s7botqWYvqJBU18ctHRZshxQLaz5q240EsOsBWGvxZN1rn1SonO5DsBxxrPvJJmbyI47lXpaScrnSE1eotvgt0zWDc58kkgMGgBxiMYjqQXdFylwp5WU+Q9JThCakt+QsQP9X5MRvPfPWOg9a9Kw==","process_after":10,"comment":"test","processed":2, "encryption": {"kind":"X25519","vault_url":"http://127.0.0.1:8080/api/vault/store/%s/7df7c024-d0a8-4183-83fa-373ea4a7735a"}}]}`, clientUUID, clientUUID, clientUUID))
 	require.Nil(t, err)
 
 	f, err = os.Create(vaultFile)
@@ -72,11 +72,13 @@ func TestDMH(t *testing.T) {
 	}
 
 	hitEndpoint := map[string]int{
-		"/alive":               0,
-		"/test":                0,
-		"/action/once":         0,
-		"/action/test":         0,
-		"/action/min_interval": 0,
+		"/alive":                 0,
+		"/test":                  0,
+		"/action/once":           0,
+		"/action/test":           0,
+		"/action/min_interval":   0,
+		"/action/never_executed": 0,
+		"/action/missing_key":    0,
 	}
 	// Lets start fake server which can be used by Actions.
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -193,7 +195,7 @@ func TestDMH(t *testing.T) {
 	action = &state.Action{
 		Kind:         "json_post",
 		ProcessAfter: 1,
-		MinInterval:  2,
+		MinInterval:  4,
 		Comment:      "min_interval",
 		Data:         `{"url":"http://127.0.0.1:9090/action/min_interval","data":{"key1":"value1","key2":"action/min_interval"},"headers":{"header3":"test1","header4":"test2"},"success_code":[200]}`,
 	}
@@ -239,7 +241,7 @@ func TestDMH(t *testing.T) {
 	err = json.NewDecoder(resp.Body).Decode(&actions)
 	require.Nil(t, err)
 
-	require.Equal(t, 6, len(actions))
+	require.Equal(t, 7, len(actions))
 	addedActionEncrypted := actions[2]
 	require.NotEqual(t, action.Data, addedActionEncrypted.Data)
 	require.Equal(t, fmt.Sprintf("http://127.0.0.1:8080/api/vault/store/%s/%s", clientUUID, addedActionEncrypted.UUID), addedActionEncrypted.EncryptionMeta.VaultURL)
@@ -253,6 +255,13 @@ func TestDMH(t *testing.T) {
 		expectComment      string
 		expectProcessed    int
 	}{
+		{
+			expectUUID:         "bf577b9d-26f4-4168-b8e4-0e1d692559ed",
+			expectKind:         "json_post",
+			expectProcessAfter: 1,
+			expectComment:      "missing-encryoption-key-from-vault",
+			expectProcessed:    0,
+		},
 		{
 			expectUUID:         "9acc344e-a65b-4675-9723-5664c0e73c76",
 			expectKind:         "json_post",
@@ -283,7 +292,7 @@ func TestDMH(t *testing.T) {
 		{
 			expectKind:         "json_post",
 			expectProcessAfter: 1,
-			expectMinInterval:  2,
+			expectMinInterval:  4,
 			expectComment:      "min_interval",
 			expectProcessed:    0,
 		},
@@ -315,7 +324,7 @@ func TestDMH(t *testing.T) {
 		require.Nil(t, err)
 		defer resp.Body.Close()
 
-		if action.Processed == 2 {
+		if action.Processed == 2 || action.UUID == "bf577b9d-26f4-4168-b8e4-0e1d692559ed" {
 			require.Equal(t, http.StatusNotFound, resp.StatusCode)
 		} else {
 			require.Equal(t, http.StatusLocked, resp.StatusCode)
@@ -323,7 +332,7 @@ func TestDMH(t *testing.T) {
 	}
 
 	// Lets fetch single action
-	resp, err = http.Get(fmt.Sprintf("http://127.0.0.1:8080/api/action/store/%s", actions[0].UUID))
+	resp, err = http.Get(fmt.Sprintf("http://127.0.0.1:8080/api/action/store/%s", actions[1].UUID))
 	require.Nil(t, err)
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
@@ -331,7 +340,7 @@ func TestDMH(t *testing.T) {
 	err = json.NewDecoder(resp.Body).Decode(&encryptedAction)
 	require.Nil(t, err)
 	require.Equal(t, "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSAvb2JISGVZS3lEcmlsenlaeUFnbHRDYjJTK1FLSVdLSWkvYjhwSjRXeEg4CmxNT0YrVCtjNUZRWi9HS2d4MFFiN3AwVDlRc0k1eVJsbXBqWHhMRFhTWE0KLS0tIE12NktMSlVGVC9LMlpTRGFjZ2FRVXhpcEJjdmwyUExCL2tGaGJtZFhyc1UKfx25yewZmc6eVeuX7ufIN2vmFR/hXldbY1LW1UwNMH/AqPToZ2ZKTYdqhA7+ZtF8mOyduvsLVX1siaatb0VC4kmGdIr2DiPlVyCbcGNwTgNqjPs5RNkcqQB9DITQPfGdmGRh3OP3t16FFT91zVWDRDRVbFnSEKfeusg33wDHlsd1E99RrVPAK5TpT6wGykDCCW66Xwh8YNYkFb4s2f0PSIsE/r7bxR4mq1VNbBuV0eRo5uz9WAiR7NyH", encryptedAction.Data)
-	require.Equal(t, actions[0].UUID, encryptedAction.UUID)
+	require.Equal(t, actions[1].UUID, encryptedAction.UUID)
 
 	// Lets delete single action
 	req, err := http.NewRequest("DELETE", fmt.Sprintf("http://127.0.0.1:8080/api/action/store/%s", actions[0].UUID), nil)
@@ -349,18 +358,20 @@ func TestDMH(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, resp.StatusCode)
 
 	// Lets ensure that all fakeServer endpoints were visited
-	require.Equal(t, 5, len(hitEndpoint))
+	require.Equal(t, 7, len(hitEndpoint))
 	for k, v := range map[string]int{
-		"/alive":               2,
-		"/test":                1,
-		"/action/once":         1,
-		"/action/test":         1,
-		"/action/min_interval": 2,
+		"/alive":                 2,
+		"/test":                  1,
+		"/action/once":           1,
+		"/action/test":           1,
+		"/action/min_interval":   2,
+		"/action/never_executed": 0,
+		"/action/missing_key":    0,
 	} {
 		require.Equal(t, v, hitEndpoint[k])
 	}
 
-	// Lets confirrm vault secret lock status
+	// Lets confirm vault secret lock status
 	time.Sleep(3 * time.Second)
 
 	resp, err = http.Get("http://127.0.0.1:8080/api/action/store")
@@ -369,19 +380,32 @@ func TestDMH(t *testing.T) {
 	err = json.NewDecoder(resp.Body).Decode(&actions)
 	require.Nil(t, err)
 
-	require.Equal(t, 5, len(actions))
+	require.Equal(t, 6, len(actions))
 
 	for _, action := range actions {
 		resp, err = http.Get(fmt.Sprintf("http://127.0.0.1:8080/api/vault/store/%s/%s", clientUUID, action.UUID))
 		require.Nil(t, err)
 		defer resp.Body.Close()
 
-		if action.Processed == 2 {
+		if action.Processed == 2 || action.UUID == "bf577b9d-26f4-4168-b8e4-0e1d692559ed" {
 			require.Equal(t, http.StatusNotFound, resp.StatusCode)
 		} else if action.MinInterval > 0 {
 			require.Equal(t, http.StatusOK, resp.StatusCode)
 		} else if action.Processed == 0 {
 			require.Equal(t, http.StatusLocked, resp.StatusCode)
+		}
+
+		if (action.Processed == 0 && action.MinInterval == 0) || action.Processed == 2 {
+			req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("http://127.0.0.1:8080/api/vault/store/%s/%s", clientUUID, action.UUID), nil)
+			require.Nil(t, err)
+			resp, err = http.DefaultClient.Do(req)
+			require.Nil(t, err)
+			defer resp.Body.Close()
+			if action.Processed == 0 {
+				require.Equal(t, http.StatusLocked, resp.StatusCode)
+			} else {
+				require.Equal(t, http.StatusNotFound, resp.StatusCode)
+			}
 		}
 	}
 
@@ -393,7 +417,8 @@ func TestDMH(t *testing.T) {
 	body, err := io.ReadAll(resp.Body)
 	require.Nil(t, err)
 
-	require.Contains(t, string(body), `dmh_actions{processed="0"} 2`)
+	require.Contains(t, string(body), `dmh_actions{processed="0"} 3`)
 	require.Contains(t, string(body), `dmh_actions{processed="1"} 0`)
 	require.Contains(t, string(body), `dmh_actions{processed="2"} 3`)
+	require.Contains(t, string(body), `dmh_action_errors_total{action="bf577b9d-26f4-4168-b8e4-0e1d692559ed",error="DecryptAction"} 10`)
 }

@@ -1181,6 +1181,68 @@ func TestMarkActionAsProcessed(t *testing.T) {
 						Data:         "encrypted2",
 					},
 					UUID:           "test2",
+					Processed:      1,
+					EncryptionMeta: EncryptionMeta{},
+				},
+			},
+			fakeHTTPServer: func() *httptest.Server {
+				s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					require.Equal(t, "/api/vault/store/client-random-uuid/test2", r.URL.Path)
+					w.WriteHeader(http.StatusLocked)
+				}))
+				return s
+			},
+			expectedError: true,
+		},
+		{
+			inputState: func() StateInterface {
+				s, err := New(&Options{SavePath: "test_state.json", VaultClientUUID: "client-random-uuid"})
+				require.Nil(t, err)
+				s.(*State).data.Actions = []*EncryptedAction{
+					{
+						Action: Action{
+							Kind:         "mail",
+							ProcessAfter: 20,
+							Comment:      "test",
+							Data:         "encrypted",
+						},
+						UUID:      "test",
+						Processed: 0,
+					},
+					{
+						Action: Action{
+							Kind:         "mail",
+							ProcessAfter: 20,
+							Comment:      "test",
+							Data:         "encrypted2",
+						},
+						UUID:           "test2",
+						Processed:      0,
+						EncryptionMeta: EncryptionMeta{},
+					},
+				}
+				return s
+			},
+			inputUUID: "test2",
+			expectedActions: []*EncryptedAction{
+				{
+					Action: Action{
+						Kind:         "mail",
+						ProcessAfter: 20,
+						Comment:      "test",
+						Data:         "encrypted",
+					},
+					UUID:      "test",
+					Processed: 0,
+				},
+				{
+					Action: Action{
+						Kind:         "mail",
+						ProcessAfter: 20,
+						Comment:      "test",
+						Data:         "encrypted2",
+					},
+					UUID:           "test2",
 					Processed:      2,
 					EncryptionMeta: EncryptionMeta{},
 				},
@@ -1189,6 +1251,67 @@ func TestMarkActionAsProcessed(t *testing.T) {
 				s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					require.Equal(t, "/api/vault/store/client-random-uuid/test2", r.URL.Path)
 					w.WriteHeader(http.StatusOK)
+				}))
+				return s
+			},
+		},
+		{
+			inputState: func() StateInterface {
+				s, err := New(&Options{SavePath: "test_state.json", VaultClientUUID: "client-random-uuid"})
+				require.Nil(t, err)
+				s.(*State).data.Actions = []*EncryptedAction{
+					{
+						Action: Action{
+							Kind:         "mail",
+							ProcessAfter: 20,
+							Comment:      "test",
+							Data:         "encrypted",
+						},
+						UUID:      "test",
+						Processed: 0,
+					},
+					{
+						Action: Action{
+							Kind:         "mail",
+							ProcessAfter: 20,
+							Comment:      "test",
+							Data:         "encrypted2",
+						},
+						UUID:           "test2",
+						Processed:      0,
+						EncryptionMeta: EncryptionMeta{},
+					},
+				}
+				return s
+			},
+			inputUUID: "test2",
+			expectedActions: []*EncryptedAction{
+				{
+					Action: Action{
+						Kind:         "mail",
+						ProcessAfter: 20,
+						Comment:      "test",
+						Data:         "encrypted",
+					},
+					UUID:      "test",
+					Processed: 0,
+				},
+				{
+					Action: Action{
+						Kind:         "mail",
+						ProcessAfter: 20,
+						Comment:      "test",
+						Data:         "encrypted2",
+					},
+					UUID:           "test2",
+					Processed:      2,
+					EncryptionMeta: EncryptionMeta{},
+				},
+			},
+			fakeHTTPServer: func() *httptest.Server {
+				s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					require.Equal(t, "/api/vault/store/client-random-uuid/test2", r.URL.Path)
+					w.WriteHeader(http.StatusNotFound)
 				}))
 				return s
 			},
