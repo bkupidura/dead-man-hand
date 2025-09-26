@@ -14,6 +14,12 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
+var (
+	// mocks for tests
+	newRequest  = http.NewRequest
+	jsonMarshal = json.Marshal
+)
+
 const defaultServerAddr = "http://127.0.0.1:8080"
 
 var getClient = func(cmd *cli.Command) *http.Client {
@@ -204,7 +210,7 @@ func addAction(ctx context.Context, cmd *cli.Command) error {
 		payload["comment"] = comment
 	}
 
-	jsonData, err := json.Marshal(payload)
+	jsonData, err := jsonMarshal(payload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal JSON: %w", err)
 	}
@@ -251,7 +257,7 @@ func testAction(ctx context.Context, cmd *cli.Command) error {
 		"process_after": 10,
 	}
 
-	jsonData, err := json.Marshal(payload)
+	jsonData, err := jsonMarshal(payload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal JSON: %w", err)
 	}
@@ -295,7 +301,7 @@ func deleteAction(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("unable to parse address: %s", err)
 	}
 
-	req, err := http.NewRequest(
+	req, err := newRequest(
 		"DELETE",
 		endpointAddress,
 		nil,

@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -220,10 +223,11 @@ func TestListActions(t *testing.T) {
 
 func TestAddAction(t *testing.T) {
 	tests := []struct {
-		mockHandler   http.HandlerFunc
-		inputParams   []string
-		inputServer   string
-		expectedError string
+		mockHandler     http.HandlerFunc
+		inputParams     []string
+		inputServer     string
+		expectedError   string
+		mockJsonMarshal func(v interface{}) ([]byte, error)
 	}{
 		{
 			inputParams:   []string{"--data", "", "--kind", "", "--process-after", "10", "--comment", "comment", "--min-interval", "3"},
@@ -255,6 +259,13 @@ func TestAddAction(t *testing.T) {
 				w.WriteHeader(http.StatusCreated)
 			},
 		},
+		{
+			inputParams:   []string{"--data", "{}", "--kind", "test", "--process-after", "10"},
+			expectedError: "failed to marshal JSON",
+			mockJsonMarshal: func(v interface{}) ([]byte, error) {
+				return nil, fmt.Errorf("forced marshal error")
+			},
+		},
 	}
 	for _, test := range tests {
 		var fakeServer *httptest.Server
@@ -268,6 +279,12 @@ func TestAddAction(t *testing.T) {
 				return fakeServer.Client()
 			}
 		}
+
+		jsonMarshal = json.Marshal
+		if test.mockJsonMarshal != nil {
+			jsonMarshal = test.mockJsonMarshal
+		}
+		defer func() { jsonMarshal = json.Marshal }()
 
 		cmd := createCLI()
 		var params []string
@@ -286,18 +303,18 @@ func TestAddAction(t *testing.T) {
 			require.Nil(t, err)
 		} else {
 			require.NotNil(t, err)
-			require.Equal(t, test.expectedError, err.Error())
+			require.Contains(t, err.Error(), test.expectedError)
 		}
-
 	}
 }
 
 func TestTestAction(t *testing.T) {
 	tests := []struct {
-		mockHandler   http.HandlerFunc
-		inputParams   []string
-		inputServer   string
-		expectedError string
+		mockHandler     http.HandlerFunc
+		inputParams     []string
+		inputServer     string
+		expectedError   string
+		mockJsonMarshal func(v interface{}) ([]byte, error)
 	}{
 		{
 			inputParams:   []string{"--data", "", "--kind", ""},
@@ -329,6 +346,13 @@ func TestTestAction(t *testing.T) {
 				w.WriteHeader(http.StatusOK)
 			},
 		},
+		{
+			inputParams:   []string{"--data", "{}", "--kind", "test"},
+			expectedError: "failed to marshal JSON",
+			mockJsonMarshal: func(v interface{}) ([]byte, error) {
+				return nil, fmt.Errorf("forced marshal error")
+			},
+		},
 	}
 	for _, test := range tests {
 		var fakeServer *httptest.Server
@@ -342,6 +366,12 @@ func TestTestAction(t *testing.T) {
 				return fakeServer.Client()
 			}
 		}
+
+		jsonMarshal = json.Marshal
+		if test.mockJsonMarshal != nil {
+			jsonMarshal = test.mockJsonMarshal
+		}
+		defer func() { jsonMarshal = json.Marshal }()
 
 		cmd := createCLI()
 		var params []string
@@ -360,18 +390,18 @@ func TestTestAction(t *testing.T) {
 			require.Nil(t, err)
 		} else {
 			require.NotNil(t, err)
-			require.Equal(t, test.expectedError, err.Error())
+			require.Contains(t, err.Error(), test.expectedError)
 		}
-
 	}
 }
 
 func TestDeleteAction(t *testing.T) {
 	tests := []struct {
-		mockHandler   http.HandlerFunc
-		inputParams   []string
-		inputServer   string
-		expectedError string
+		mockHandler    http.HandlerFunc
+		inputParams    []string
+		inputServer    string
+		expectedError  string
+		mockNewRequest func(method, url string, body io.Reader) (*http.Request, error)
 	}{
 		{
 			inputParams:   []string{"--uuid", ""},
@@ -399,6 +429,13 @@ func TestDeleteAction(t *testing.T) {
 				w.WriteHeader(http.StatusOK)
 			},
 		},
+		{
+			inputParams:   []string{"--uuid", "test-uuid"},
+			expectedError: "failed to create request",
+			mockNewRequest: func(method, url string, body io.Reader) (*http.Request, error) {
+				return nil, fmt.Errorf("forced newRequest error")
+			},
+		},
 	}
 	for _, test := range tests {
 		var fakeServer *httptest.Server
@@ -412,6 +449,12 @@ func TestDeleteAction(t *testing.T) {
 				return fakeServer.Client()
 			}
 		}
+
+		newRequest = http.NewRequest
+		if test.mockNewRequest != nil {
+			newRequest = test.mockNewRequest
+		}
+		defer func() { newRequest = http.NewRequest }()
 
 		cmd := createCLI()
 		var params []string
@@ -430,7 +473,7 @@ func TestDeleteAction(t *testing.T) {
 			require.Nil(t, err)
 		} else {
 			require.NotNil(t, err)
-			require.Equal(t, test.expectedError, err.Error())
+			require.Contains(t, err.Error(), test.expectedError)
 		}
 
 	}
