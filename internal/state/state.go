@@ -249,7 +249,7 @@ func (s *State) MarkActionAsProcessed(u string) error {
 	}
 	defer resp.Body.Close()
 
-	// Deletion was successfull or item no longer exist in vault.
+	// Deletion was successful or item no longer exist in vault.
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotFound {
 		return fmt.Errorf("unable to delete vault data, status code %d", resp.StatusCode)
 	}

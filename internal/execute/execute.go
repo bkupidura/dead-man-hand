@@ -52,7 +52,7 @@ func (e *Execute) Run(a *state.Action) error {
 	return data.Run()
 }
 
-// UnmarshallActionData will unmarshal Action.Data into valid plugin which can be executed.
+// UnmarshalActionData will unmarshal Action.Data into valid plugin which can be executed.
 func UnmarshalActionData(action *state.Action) (ExecuteData, error) {
 	switch action.Kind {
 	case "json_post":
