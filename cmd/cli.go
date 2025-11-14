@@ -200,7 +200,7 @@ func addAction(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("kind is required")
 	}
 
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"kind":          kind,
 		"data":          data,
 		"process_after": processAfter,
@@ -251,7 +251,7 @@ func testAction(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("kind is required")
 	}
 
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"kind":          kind,
 		"data":          data,
 		"process_after": 10,

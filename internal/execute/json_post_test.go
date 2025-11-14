@@ -23,7 +23,7 @@ func TestJsonPostRun(t *testing.T) {
 		{
 			inputPlugin: func(string) *ExecuteJSONPost {
 				return &ExecuteJSONPost{
-					Data: map[string]interface{}{"test": "test"},
+					Data: map[string]any{"test": "test"},
 				}
 			},
 			mockJsonMarshal: func(any) ([]byte, error) {
@@ -35,7 +35,7 @@ func TestJsonPostRun(t *testing.T) {
 			inputPlugin: func(string) *ExecuteJSONPost {
 				return &ExecuteJSONPost{
 					URL:  "broken\r",
-					Data: map[string]interface{}{"test": "test"},
+					Data: map[string]any{"test": "test"},
 				}
 			},
 			expectedError: true,
@@ -44,7 +44,7 @@ func TestJsonPostRun(t *testing.T) {
 			inputPlugin: func(string) *ExecuteJSONPost {
 				return &ExecuteJSONPost{
 					URL:  "http://non-existing",
-					Data: map[string]interface{}{"test": "test"},
+					Data: map[string]any{"test": "test"},
 				}
 			},
 			expectedError: true,
@@ -53,7 +53,7 @@ func TestJsonPostRun(t *testing.T) {
 			inputPlugin: func(url string) *ExecuteJSONPost {
 				return &ExecuteJSONPost{
 					URL:         url,
-					Data:        map[string]interface{}{"test": "test", "data": true},
+					Data:        map[string]any{"test": "test", "data": true},
 					Headers:     map[string]string{"header1": "value1", "header2": "value2"},
 					SuccessCode: []int{http.StatusCreated},
 				}
@@ -77,7 +77,7 @@ func TestJsonPostRun(t *testing.T) {
 			inputPlugin: func(url string) *ExecuteJSONPost {
 				return &ExecuteJSONPost{
 					URL:         url,
-					Data:        map[string]interface{}{"test": "test", "data": true},
+					Data:        map[string]any{"test": "test", "data": true},
 					Headers:     map[string]string{"header1": "value1", "header2": "value2"},
 					SuccessCode: []int{http.StatusCreated},
 				}

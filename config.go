@@ -26,7 +26,7 @@ func readConfig(configFile string) *koanf.Koanf {
 		log.Panicf("error loading config %s: %v", configFile, err)
 	}
 
-	k.Load(env.ProviderWithValue("DMH_", ".", func(s string, v string) (string, interface{}) {
+	k.Load(env.ProviderWithValue("DMH_", ".", func(s string, v string) (string, any) {
 		key := strings.Replace(strings.ToLower(strings.TrimPrefix(s, "DMH_")), "__", ".", -1)
 
 		// If there is a coma in the value, split the value into a slice by the comma.
