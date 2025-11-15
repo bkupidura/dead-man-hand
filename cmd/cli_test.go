@@ -227,7 +227,7 @@ func TestAddAction(t *testing.T) {
 		inputParams     []string
 		inputServer     string
 		expectedError   string
-		mockJsonMarshal func(v interface{}) ([]byte, error)
+		mockJsonMarshal func(v any) ([]byte, error)
 	}{
 		{
 			inputParams:   []string{"--data", "", "--kind", "", "--process-after", "10", "--comment", "comment", "--min-interval", "3"},
@@ -262,7 +262,7 @@ func TestAddAction(t *testing.T) {
 		{
 			inputParams:   []string{"--data", "{}", "--kind", "test", "--process-after", "10"},
 			expectedError: "failed to marshal JSON",
-			mockJsonMarshal: func(v interface{}) ([]byte, error) {
+			mockJsonMarshal: func(v any) ([]byte, error) {
 				return nil, fmt.Errorf("forced marshal error")
 			},
 		},
@@ -314,7 +314,7 @@ func TestTestAction(t *testing.T) {
 		inputParams     []string
 		inputServer     string
 		expectedError   string
-		mockJsonMarshal func(v interface{}) ([]byte, error)
+		mockJsonMarshal func(v any) ([]byte, error)
 	}{
 		{
 			inputParams:   []string{"--data", "", "--kind", ""},
@@ -349,7 +349,7 @@ func TestTestAction(t *testing.T) {
 		{
 			inputParams:   []string{"--data", "{}", "--kind", "test"},
 			expectedError: "failed to marshal JSON",
-			mockJsonMarshal: func(v interface{}) ([]byte, error) {
+			mockJsonMarshal: func(v any) ([]byte, error) {
 				return nil, fmt.Errorf("forced marshal error")
 			},
 		},

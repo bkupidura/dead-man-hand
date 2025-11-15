@@ -102,7 +102,7 @@ func TestUnmarshalActionData(t *testing.T) {
 			},
 			expectedError: fmt.Errorf("url must be provided"),
 			expectedData: &ExecuteJSONPost{
-				URL: "", SuccessCode: []int{200}, Data: map[string]interface{}{"test": "value"},
+				URL: "", SuccessCode: []int{200}, Data: map[string]any{"test": "value"},
 			},
 		},
 		{
@@ -110,7 +110,7 @@ func TestUnmarshalActionData(t *testing.T) {
 				Kind: "json_post", Data: `{"url":"test", "success_code": [200], "data": {"test": "value"}}`,
 			},
 			expectedData: &ExecuteJSONPost{
-				URL: "test", SuccessCode: []int{200}, Data: map[string]interface{}{"test": "value"},
+				URL: "test", SuccessCode: []int{200}, Data: map[string]any{"test": "value"},
 			},
 		},
 		{

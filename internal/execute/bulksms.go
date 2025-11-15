@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"slices"
 	"strings"
 
 	"dmh/internal/state"
@@ -103,14 +104,8 @@ func (d *ExecuteBulkSMS) PopulateConfig(e *Execute) error {
 	if d.config.RoutingGroup == "" {
 		d.config.RoutingGroup = "standard"
 	}
-	validRoutingGroup := false
-	for _, allowedValue := range []string{"economy", "standard", "premium"} {
-		if d.config.RoutingGroup == allowedValue {
-			validRoutingGroup = true
-			break
-		}
-	}
-	if !validRoutingGroup {
+
+	if !slices.Contains([]string{"economy", "standard", "premium"}, d.config.RoutingGroup) {
 		return fmt.Errorf("routing_group must be one of economy, standard or premium")
 	}
 	return nil

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/mail"
+	"slices"
 
 	"dmh/internal/state"
 
@@ -116,15 +117,7 @@ func (d *ExecuteMail) PopulateConfig(e *Execute) error {
 		d.config.TLSPolicy = "tls_mandatory"
 	}
 
-	validTLSPolicy := false
-	for _, allowedValue := range []string{"tls_mandatory", "tls_opportunistic", "no_tls"} {
-		if d.config.TLSPolicy == allowedValue {
-			validTLSPolicy = true
-			break
-		}
-	}
-
-	if !validTLSPolicy {
+	if !slices.Contains([]string{"tls_mandatory", "tls_opportunistic", "no_tls"}, d.config.TLSPolicy) {
 		return fmt.Errorf("tls_policy must be tls_mandatory, tls_opportunistic or no_tls")
 	}
 

@@ -5,15 +5,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 
 	"dmh/internal/state"
 )
 
 type ExecuteJSONPost struct {
-	URL         string                 `json:"url"`
-	Headers     map[string]string      `json:"headers"`
-	Data        map[string]interface{} `json:"data"`
-	SuccessCode []int                  `json:"success_code"`
+	URL         string            `json:"url"`
+	Headers     map[string]string `json:"headers"`
+	Data        map[string]any    `json:"data"`
+	SuccessCode []int             `json:"success_code"`
 }
 
 // Run will sent HTTP POST request which application/json encoding.
@@ -39,10 +40,8 @@ func (d *ExecuteJSONPost) Run() error {
 	}
 	defer resp.Body.Close()
 
-	for _, code := range d.SuccessCode {
-		if code == resp.StatusCode {
-			return nil
-		}
+	if slices.Contains(d.SuccessCode, resp.StatusCode) {
+		return nil
 	}
 
 	return fmt.Errorf("received wrong status code %d", resp.StatusCode)
