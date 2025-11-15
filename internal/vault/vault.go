@@ -23,7 +23,7 @@ type EncryptionMeta struct {
 }
 
 // Secret stores single private key and information when it can be released.
-// Secret will be relesed after ProcessAfter * hour from LastSeen reported to Vault.
+// Secret will be released after ProcessAfter * hour from LastSeen reported to Vault.
 type Secret struct {
 	Key            string         `json:"key"`
 	ProcessAfter   int            `json:"process_after"`
@@ -123,7 +123,7 @@ func (v *Vault) GetSecret(clientUUID string, secretUUID string) (*Secret, error)
 }
 
 // AddSecret adds secret to Vault.
-// If secret for clientUUID+secretUUID already exists it will NOT be overriden.
+// If secret for clientUUID+secretUUID already exists it will NOT be overridden.
 // Secrets will be encrypted with Vault.key before storing.
 func (v *Vault) AddSecret(clientUUID string, secretUUID string, secret *Secret) error {
 	v.ensureClientUUID(clientUUID)

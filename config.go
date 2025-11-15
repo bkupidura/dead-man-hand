@@ -18,7 +18,7 @@ import (
 // readConfig reads configFile and feeds it to koanf.
 // readConfig can be feeded from env variables:
 // DMH_REMOTE_VAULT__URL=http://test -> remote_vault.url=http://test
-// DMH_COMPONETS = "dmh," -> componets=["dmh"]
+// DMH_COMPONENTS = "dmh," -> components=["dmh"]
 // It will also ensure that required keys for enabled component are present.
 func readConfig(configFile string) *koanf.Koanf {
 	k := koanf.New(".")

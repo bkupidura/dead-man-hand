@@ -47,7 +47,7 @@ func main() {
 	}
 
 	if slices.Contains(enabledComponents, "dmh") && slices.Contains(enabledComponents, "vault") {
-		log.Printf("dmh and vault component enabled. THIS IS NOT RECOMENDATED FOR SECURITY REASONS!")
+		log.Printf("dmh and vault component enabled. THIS IS NOT RECOMMENDED FOR SECURITY REASONS!")
 	}
 
 	var s state.StateInterface

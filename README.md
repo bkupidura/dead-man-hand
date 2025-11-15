@@ -3,7 +3,7 @@
 # Idea
 Dead-Man-Hand will execute pre-added actions when you will no longer be "available".
 
-**All actions are encrypted and when properly configured nobody will be able to get action details untill you are dead.**
+**All actions are encrypted and when properly configured nobody will be able to get action details until you are dead.**
 
 Main goal of `DMH` is to ensure that actions can be executed only when you are dead. And before that time, every action should be confidential - even for people who have access to `DMH`.
 
@@ -45,7 +45,7 @@ docker run --name dead-man-hand -e DMH_CONFIG_FILE=/data/config.yaml -v /srv/dea
 
 # Execute plugins
 
-`DMH` is easly extensible and support below plugins:
+`DMH` is easily extensible and support below plugins:
 * `dummy` - log action message
 * `json_post` - send `HTTP` `POST` request
 * `mail` - send mail over `SMTP`
