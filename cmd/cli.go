@@ -11,22 +11,22 @@ import (
 	"os"
 	"time"
 
+	"dmh/internal/state"
+
 	"github.com/urfave/cli/v3"
+	"gopkg.in/yaml.v3"
 )
 
 var (
 	// mocks for tests
 	newRequest  = http.NewRequest
 	jsonMarshal = json.Marshal
+	getClient   = func(cmd *cli.Command) *http.Client {
+		return &http.Client{Timeout: 5 * time.Second}
+	}
 )
 
 const defaultServerAddr = "http://127.0.0.1:8080"
-
-var getClient = func(cmd *cli.Command) *http.Client {
-	return &http.Client{
-		Timeout: 5 * time.Second,
-	}
-}
 
 func createCLI() *cli.Command {
 	return &cli.Command{
@@ -65,36 +65,37 @@ func createCLI() *cli.Command {
 					},
 					{
 						Name:  "add",
-						Usage: "Add a new action",
+						Usage: "Add a new action or multiple actions from a file",
 						Flags: []cli.Flag{
 							&cli.StringFlag{
-								Name:     "data",
-								Aliases:  []string{"d"},
-								Usage:    "Action data (json formatted)",
-								Required: true,
+								Name:    "data",
+								Aliases: []string{"d"},
+								Usage:   "Action data (json formatted). Ignored if --file is provided.",
 							},
 							&cli.StringFlag{
 								Name:  "comment",
-								Usage: "Action comment (will be stored unencrypted)",
+								Usage: "Action comment (will be stored unencrypted). Ignored if --file is provided.",
 							},
 							&cli.StringFlag{
-								Name:     "kind",
-								Aliases:  []string{"k"},
-								Usage:    "Action kind",
-								Required: true,
+								Name:    "kind",
+								Aliases: []string{"k"},
+								Usage:   "Action kind. Ignored if --file is provided.",
 							},
 							&cli.IntFlag{
-								Name:     "process-after",
-								Aliases:  []string{"p"},
-								Usage:    "Process action after <param> hours from last seen",
-								Required: true,
-								Value:    12,
+								Name:    "process-after",
+								Aliases: []string{"p"},
+								Usage:   "Process action after <param> hours from last seen. Required. Ignored if --file is provided.",
 							},
 							&cli.IntFlag{
 								Name:    "min-interval",
 								Aliases: []string{"i"},
 								Usage:   "Process action after <param> hours from last run. If min-interval > 0, action will be run FOREVER and NOT ONCE. USE WITH CAUTION!",
 								Value:   0,
+							},
+							&cli.StringFlag{
+								Name:    "file",
+								Aliases: []string{"f"},
+								Usage:   "Path to YAML file containing actions to add",
 							},
 						},
 						Action: addAction,
@@ -186,46 +187,29 @@ func listActions(ctx context.Context, cmd *cli.Command) error {
 	return err
 }
 
-func addAction(ctx context.Context, cmd *cli.Command) error {
-	data := cmd.String("data")
-	comment := cmd.String("comment")
-	kind := cmd.String("kind")
-	processAfter := cmd.Int("process-after")
-	minInterval := cmd.Int("min-interval")
-
-	if data == "" {
+// createAction validates and sends a single action to the server
+func createAction(cmd *cli.Command, action *state.Action) error {
+	if action.Data == "" {
 		return fmt.Errorf("data is required")
 	}
-	if kind == "" {
+	if action.Kind == "" {
 		return fmt.Errorf("kind is required")
 	}
-
-	payload := map[string]any{
-		"kind":          kind,
-		"data":          data,
-		"process_after": processAfter,
-		"min_interval":  minInterval,
-	}
-	if comment != "" {
-		payload["comment"] = comment
+	if action.ProcessAfter <= 0 {
+		return fmt.Errorf("process-after is required and must be > 0")
 	}
 
-	jsonData, err := jsonMarshal(payload)
+	payload, err := jsonMarshal(action)
 	if err != nil {
 		return fmt.Errorf("failed to marshal JSON: %w", err)
 	}
 
-	client := getClient(cmd)
-	server := cmd.String("server")
-	endpointAddress, err := url.JoinPath(server, "api", "action", "store")
+	endpointAddress, err := url.JoinPath(cmd.String("server"), "api", "action", "store")
 	if err != nil {
 		return fmt.Errorf("unable to parse address: %s", err)
 	}
-	resp, err := client.Post(
-		endpointAddress,
-		"application/json",
-		bytes.NewBuffer(jsonData),
-	)
+
+	resp, err := getClient(cmd).Post(endpointAddress, "application/json", bytes.NewBuffer(payload))
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
 	}
@@ -235,9 +219,56 @@ func addAction(ctx context.Context, cmd *cli.Command) error {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("server returned status %d: %s", resp.StatusCode, string(body))
 	}
-
-	fmt.Println("Action added successfully")
 	return nil
+}
+
+// addAction is the CLI handler. If --file is provided, reads YAML and creates each action.
+// Otherwise creates a single action from flags.
+func addAction(ctx context.Context, cmd *cli.Command) error {
+	if filePath := cmd.String("file"); filePath != "" {
+		actions, err := loadActionsFromFile(filePath)
+		if err != nil {
+			return fmt.Errorf("unable to load actions from file: %w", err)
+		}
+		if len(actions) == 0 {
+			return fmt.Errorf("no actions found in file")
+		}
+
+		var failed int
+		for i, action := range actions {
+			if err := createAction(cmd, action); err != nil {
+				fmt.Fprintf(os.Stderr, "action %d: %s\n", i+1, err)
+				failed++
+			}
+		}
+
+		if failed > 0 {
+			return fmt.Errorf("%d of %d actions failed to add", failed, len(actions))
+		}
+		return nil
+	}
+
+	return createAction(cmd, &state.Action{
+		Kind:         cmd.String("kind"),
+		Data:         cmd.String("data"),
+		ProcessAfter: cmd.Int("process-after"),
+		MinInterval:  cmd.Int("min-interval"),
+		Comment:      cmd.String("comment"),
+	})
+}
+
+// loadActionsFromFile reads a YAML file containing a list of actions
+func loadActionsFromFile(path string) ([]*state.Action, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	var actions []*state.Action
+	if err := yaml.Unmarshal(data, &actions); err != nil {
+		return nil, err
+	}
+	return actions, nil
 }
 
 func testAction(ctx context.Context, cmd *cli.Command) error {
@@ -262,17 +293,12 @@ func testAction(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("failed to marshal JSON: %w", err)
 	}
 
-	client := getClient(cmd)
-	server := cmd.String("server")
-	endpointAddress, err := url.JoinPath(server, "api", "action", "test")
+	endpointAddress, err := url.JoinPath(cmd.String("server"), "api", "action", "test")
 	if err != nil {
 		return fmt.Errorf("unable to parse address: %s", err)
 	}
-	resp, err := client.Post(
-		endpointAddress,
-		"application/json",
-		bytes.NewBuffer(jsonData),
-	)
+
+	resp, err := getClient(cmd).Post(endpointAddress, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
 	}
@@ -301,11 +327,7 @@ func deleteAction(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("unable to parse address: %s", err)
 	}
 
-	req, err := newRequest(
-		"DELETE",
-		endpointAddress,
-		nil,
-	)
+	req, err := newRequest("DELETE", endpointAddress, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}

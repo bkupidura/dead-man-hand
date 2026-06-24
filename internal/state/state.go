@@ -27,11 +27,11 @@ var (
 // Action stores user actions.
 // Action is stored only in memory when created via API. It is never saved.
 type Action struct {
-	Kind         string `json:"kind"`          // kind of action to execute (mail, bulksms, json_post)
-	ProcessAfter int    `json:"process_after"` // number of hours (since last seen) before executing action
-	MinInterval  int    `json:"min_interval"`  // number of hours (since last run) before executing action AGAIN. If this is >0 action will be executed forever, use with caution!
-	Comment      string `json:"comment"`       // comment, it will NOT be encrypted
-	Data         string `json:"data"`          // json representation of data needed by kind
+	Kind         string `json:"kind" yaml:"kind"`                   // kind of action to execute (mail, bulksms, json_post)
+	ProcessAfter int    `json:"process_after" yaml:"process_after"` // number of hours (since last seen) before executing action
+	MinInterval  int    `json:"min_interval" yaml:"min_interval"`   // number of hours (since last run) before executing action AGAIN. If this is >0 action will be executed forever, use with caution!
+	Comment      string `json:"comment" yaml:"comment"`             // comment, it will NOT be encrypted
+	Data         string `json:"data" yaml:"data"`                   // json representation of data needed by kind
 }
 
 // EncryptionMeta stores encryption metadata.
