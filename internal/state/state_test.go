@@ -59,6 +59,44 @@ func (f *failFile) Close() error {
 	return f.failWriter.Close()
 }
 
+func TestActionValidate(t *testing.T) {
+	tests := []struct {
+		inputAction   *Action
+		expectedError error
+	}{
+		{
+			inputAction:   &Action{Kind: "dummy", ProcessAfter: 10},
+			expectedError: fmt.Errorf("data is required"),
+		},
+		{
+			inputAction:   &Action{Data: `{"message": "test"}`, ProcessAfter: 10},
+			expectedError: fmt.Errorf("kind is required"),
+		},
+		{
+			inputAction:   &Action{Kind: "dummy", Data: `{"message": "test"}`},
+			expectedError: fmt.Errorf("process_after should be greater than 0"),
+		},
+		{
+			inputAction:   &Action{Kind: "dummy", Data: `{"message": "test"}`, ProcessAfter: -1},
+			expectedError: fmt.Errorf("process_after should be greater than 0"),
+		},
+		{
+			inputAction:   &Action{Kind: "dummy", Data: `{"message": "test"}`, ProcessAfter: 10, MinInterval: -1},
+			expectedError: fmt.Errorf("min_interval should be greater or equal 0"),
+		},
+		{
+			inputAction: &Action{Kind: "dummy", Data: `{"message": "test"}`, ProcessAfter: 10},
+		},
+		{
+			inputAction: &Action{Kind: "dummy", Data: `{"message": "test"}`, ProcessAfter: 10, MinInterval: 5},
+		},
+	}
+	for _, test := range tests {
+		err := test.inputAction.Validate()
+		require.Equal(t, test.expectedError, err)
+	}
+}
+
 func TestNew(t *testing.T) {
 	tests := []struct {
 		inputOptions  *Options
@@ -257,6 +295,28 @@ func TestAddAction(t *testing.T) {
 		mockJsonMarshal func(any) ([]byte, error)
 		fakeHTTPServer  func() *httptest.Server
 	}{
+		{
+			inputAction: []*Action{
+				{
+					Kind:         "mail",
+					ProcessAfter: 10,
+					Comment:      "a",
+				},
+			},
+			inputState: func() *State {
+				s := &State{
+					data: &data{
+						LastSeen: time.Now(),
+						Actions:  []*EncryptedAction{},
+					},
+					vaultURL:        "",
+					vaultClientUUID: "random-uuid",
+					savePath:        "test_state.json",
+				}
+				return s
+			},
+			expectedError: true,
+		},
 		{
 			inputAction: []*Action{
 				{

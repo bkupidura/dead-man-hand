@@ -27,11 +27,29 @@ var (
 // Action stores user actions.
 // Action is stored only in memory when created via API. It is never saved.
 type Action struct {
-	Kind         string `json:"kind"`          // kind of action to execute (mail, bulksms, json_post)
-	ProcessAfter int    `json:"process_after"` // number of hours (since last seen) before executing action
-	MinInterval  int    `json:"min_interval"`  // number of hours (since last run) before executing action AGAIN. If this is >0 action will be executed forever, use with caution!
-	Comment      string `json:"comment"`       // comment, it will NOT be encrypted
-	Data         string `json:"data"`          // json representation of data needed by kind
+	Kind         string `json:"kind" yaml:"kind"`                   // kind of action to execute (mail, bulksms, json_post)
+	ProcessAfter int    `json:"process_after" yaml:"process_after"` // number of hours (since last seen) before executing action
+	MinInterval  int    `json:"min_interval" yaml:"min_interval"`   // number of hours (since last run) before executing action AGAIN. If this is >0 action will be executed forever, use with caution!
+	Comment      string `json:"comment" yaml:"comment"`             // comment, it will NOT be encrypted
+	Data         string `json:"data" yaml:"data"`                   // json representation of data needed by kind
+}
+
+// Validate checks Action fields.
+// It is shared by all action creation paths (API, CLI flags, CLI file import).
+func (a *Action) Validate() error {
+	if a.Data == "" {
+		return fmt.Errorf("data is required")
+	}
+	if a.Kind == "" {
+		return fmt.Errorf("kind is required")
+	}
+	if a.ProcessAfter <= 0 {
+		return fmt.Errorf("process_after should be greater than 0")
+	}
+	if a.MinInterval < 0 {
+		return fmt.Errorf("min_interval should be greater or equal 0")
+	}
+	return nil
 }
 
 // EncryptionMeta stores encryption metadata.
@@ -141,6 +159,10 @@ func (s *State) GetActionLastRun(u string) (time.Time, error) {
 // AddAction converts Action to EncryptedAction and stores it in State.
 // AddAction also uploads private encryption key to remote vault.
 func (s *State) AddAction(a *Action) error {
+	if err := a.Validate(); err != nil {
+		return err
+	}
+
 	c, err := cryptNew("")
 	if err != nil {
 		return err
