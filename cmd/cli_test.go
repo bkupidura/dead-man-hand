@@ -33,7 +33,7 @@ func TestActionAddRequiredParams(t *testing.T) {
 		},
 		{
 			inputParams:   []string{"--data", `{"test": "test"}`, "--kind", "test"},
-			expectedError: "process-after must be positive",
+			expectedError: "process_after should be greater than 0",
 		},
 		{
 			inputParams:   []string{"--data", `{"test": "test"}`, "--kind", "test", "--process-after", "10"},
@@ -245,11 +245,11 @@ func TestAddAction(t *testing.T) {
 		},
 		{
 			inputParams:   []string{"--data", `{"test": true}`, "--kind", "test", "--process-after", "0"},
-			expectedError: "process-after must be positive",
+			expectedError: "process_after should be greater than 0",
 		},
 		{
 			inputParams:   []string{"--data", `{"test": true}`, "--kind", "test", "--process-after", "-1"},
-			expectedError: "process-after must be positive",
+			expectedError: "process_after should be greater than 0",
 		},
 		{
 			inputServer:   "\r",
@@ -551,7 +551,7 @@ func TestAddActionFromFile(t *testing.T) {
 			fileContent: `- kind: test
   data: '{"test": true}'
 `,
-			expectedError: "unable to load actions from file: action #1: process-after must be positive",
+			expectedError: "unable to load actions from file: action #1: process_after should be greater than 0",
 		},
 		{
 			inputFile: "testdata/zero-process-after.yaml",
@@ -559,7 +559,7 @@ func TestAddActionFromFile(t *testing.T) {
   data: '{"test": true}'
   process_after: 0
 `,
-			expectedError: "unable to load actions from file: action #1: process-after must be positive",
+			expectedError: "unable to load actions from file: action #1: process_after should be greater than 0",
 		},
 		{
 			inputFile: "testdata/negative-min-interval.yaml",
@@ -568,7 +568,7 @@ func TestAddActionFromFile(t *testing.T) {
   process_after: 12
   min_interval: -1
 `,
-			expectedError: "unable to load actions from file: action #1: min-interval must be greater or equal 0",
+			expectedError: "unable to load actions from file: action #1: min_interval should be greater or equal 0",
 		},
 		{
 			inputFile: "testdata/missing-data.yaml",
@@ -756,7 +756,7 @@ func TestLoadActionsFromFile(t *testing.T) {
   process_after: 12
   min_interval: -1
 `,
-			expectedError: "action #1: min-interval must be greater or equal 0",
+			expectedError: "action #1: min_interval should be greater or equal 0",
 		},
 		{
 			inputFile: "testdata/load-min-interval.yaml",
@@ -809,15 +809,15 @@ func TestCreateAction(t *testing.T) {
 		},
 		{
 			action:        &state.Action{Kind: "test", Data: `{"test": true}`},
-			expectedError: "process-after must be positive",
+			expectedError: "process_after should be greater than 0",
 		},
 		{
 			action:        &state.Action{Kind: "test", Data: `{"test": true}`, ProcessAfter: 0},
-			expectedError: "process-after must be positive",
+			expectedError: "process_after should be greater than 0",
 		},
 		{
 			action:        &state.Action{Kind: "test", Data: `{"test": true}`, ProcessAfter: -5},
-			expectedError: "process-after must be positive",
+			expectedError: "process_after should be greater than 0",
 		},
 		{
 			action:          &state.Action{Kind: "test", Data: `{"test": true}`, ProcessAfter: 10},

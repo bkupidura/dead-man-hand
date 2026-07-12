@@ -333,7 +333,7 @@ func TestAddActionRequestBind(t *testing.T) {
 	}{
 		{
 			payload:       `{"kind": "", "data": "test", "process_after": 10}`,
-			expectedError: fmt.Errorf("unknown kind "),
+			expectedError: fmt.Errorf("kind is required"),
 			expectedReq: &addTestActionRequest{
 				Kind:         "",
 				Data:         "test",
@@ -342,7 +342,7 @@ func TestAddActionRequestBind(t *testing.T) {
 		},
 		{
 			payload:       `{"data": "test", "process_after": 10}`,
-			expectedError: fmt.Errorf("unknown kind "),
+			expectedError: fmt.Errorf("kind is required"),
 			expectedReq: &addTestActionRequest{
 				Kind:         "",
 				Data:         "test",

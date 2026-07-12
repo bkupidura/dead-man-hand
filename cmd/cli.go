@@ -189,14 +189,8 @@ func listActions(ctx context.Context, cmd *cli.Command) error {
 
 // createAction validates and sends a single action to the server
 func createAction(cmd *cli.Command, action *state.Action) error {
-	if action.Data == "" {
-		return fmt.Errorf("data is required")
-	}
-	if action.Kind == "" {
-		return fmt.Errorf("kind is required")
-	}
-	if action.ProcessAfter <= 0 {
-		return fmt.Errorf("process-after must be positive")
+	if err := action.Validate(); err != nil {
+		return err
 	}
 
 	payload, err := jsonMarshal(action)
@@ -316,17 +310,8 @@ func loadActionsFromFile(path string) ([]*state.Action, error) {
 			MinInterval:  e.MinInterval,
 			Comment:      e.Comment,
 		}
-		if e.Data.Value == "" {
-			return nil, fmt.Errorf("action #%d: data is required", i+1)
-		}
-		if a.Kind == "" {
-			return nil, fmt.Errorf("action #%d: kind is required", i+1)
-		}
-		if a.ProcessAfter <= 0 {
-			return nil, fmt.Errorf("action #%d: process-after must be positive", i+1)
-		}
-		if a.MinInterval < 0 {
-			return nil, fmt.Errorf("action #%d: min-interval must be greater or equal 0", i+1)
+		if err := a.Validate(); err != nil {
+			return nil, fmt.Errorf("action #%d: %w", i+1, err)
 		}
 		actions = append(actions, a)
 	}

@@ -184,16 +184,12 @@ func (req *addTestActionRequest) Bind(r *http.Request) error {
 		MinInterval:  req.MinInterval,
 		Data:         req.Data,
 	}
-	if _, err := execute.UnmarshalActionData(a); err != nil {
+	if err := a.Validate(); err != nil {
 		return err
 	}
 
-	if req.ProcessAfter <= 0 {
-		return fmt.Errorf("process_after should be greater than 0")
-	}
-
-	if req.MinInterval < 0 {
-		return fmt.Errorf("min_interval should be greater or equal 0")
+	if _, err := execute.UnmarshalActionData(a); err != nil {
+		return err
 	}
 	return nil
 }
