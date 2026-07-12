@@ -119,6 +119,7 @@ func (p *PromCollector) collectSlow() {
 						p.dmhMissingSecretsTotal.WithLabelValues(a.UUID).Add(1)
 						continue
 					}
+					reg.Body.Close()
 					if reg.StatusCode != http.StatusOK && reg.StatusCode != http.StatusLocked {
 						p.dmhMissingSecretsTotal.WithLabelValues(a.UUID).Add(1)
 						continue
