@@ -111,7 +111,15 @@ func main() {
 		Debug:           k.Bool("debug"),
 	})
 
-	http.ListenAndServe(fmt.Sprintf(":%d", api.HTTPPort), httpRouter)
+	httpServer := &http.Server{
+		Addr:         fmt.Sprintf(":%d", api.HTTPPort),
+		Handler:      httpRouter,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	log.Fatal(httpServer.ListenAndServe())
 }
 
 func dispatcher(s state.StateInterface, e execute.ExecuteInterface, m *metric.PromCollector, actionProcessUnit time.Duration, chStop chan bool) {
