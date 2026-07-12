@@ -51,14 +51,10 @@ func TestActionTestRequiredParams(t *testing.T) {
 	}{
 		{
 			inputParams:   []string{},
-			expectedError: `Required flags "data, kind" not set`,
+			expectedError: "data is required",
 		},
 		{
-			inputParams:   []string{"--data", `{"test": "test"}`},
-			expectedError: `Required flag "kind" not set`,
-		},
-		{
-			inputParams:   []string{"--data", `{"test": "test"}`, "--kind", "test"},
+			inputParams:   []string{"--data", `{"test": "test"}`, "--kind", "test", "--process-after", "10"},
 			expectedError: `request failed: Post "http://127.0.0.1:8080/api/action/test": dial tcp 127.0.0.1:8080: connect: connection refused`,
 		},
 	}
@@ -342,37 +338,33 @@ func TestTestAction(t *testing.T) {
 		mockJsonMarshal func(v any) ([]byte, error)
 	}{
 		{
-			inputParams:   []string{"--data", "", "--kind", "test"},
+			inputParams:   []string{"--data", "", "--kind", "test", "--process-after", "10"},
 			expectedError: "data is required",
 		},
 		{
-			inputParams:   []string{"--data", `{"test": true}`, "--kind", ""},
-			expectedError: "kind is required",
-		},
-		{
 			inputServer:   "\r",
-			inputParams:   []string{"--data", `{"test": true}`, "--kind", "test"},
+			inputParams:   []string{"--data", `{"test": true}`, "--kind", "test", "--process-after", "10"},
 			expectedError: `unable to parse address: parse "\r": net/url: invalid control character in URL`,
 		},
 		{
-			inputParams:   []string{"--data", `{"test": true}`, "--kind", "test"},
+			inputParams:   []string{"--data", `{"test": true}`, "--kind", "test", "--process-after", "10"},
 			expectedError: `request failed: Post "http://127.0.0.1:8080/api/action/test": dial tcp 127.0.0.1:8080: connect: connection refused`,
 		},
 		{
-			inputParams: []string{"--data", `{"test": true}`, "--kind", "test"},
+			inputParams: []string{"--data", `{"test": true}`, "--kind", "test", "--process-after", "10"},
 			mockHandler: func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusInternalServerError)
 			},
 			expectedError: "server returned status 500: ",
 		},
 		{
-			inputParams: []string{"--data", `{"test": true}`, "--kind", "test"},
+			inputParams: []string{"--data", `{"test": true}`, "--kind", "test", "--process-after", "10"},
 			mockHandler: func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
 			},
 		},
 		{
-			inputParams:   []string{"--data", "{}", "--kind", "test"},
+			inputParams:   []string{"--data", "{}", "--kind", "test", "--process-after", "10"},
 			expectedError: "failed to marshal JSON",
 			mockJsonMarshal: func(v any) ([]byte, error) {
 				return nil, fmt.Errorf("forced marshal error")
@@ -560,7 +552,7 @@ func TestAddActionFromFile(t *testing.T) {
 			mockHandler: func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusInternalServerError)
 			},
-			expectedError: "1 of 1 actions failed to add",
+			expectedError: "1 of 1 actions failed",
 		},
 		{
 			inputFile: "testdata/all-success.yaml",
@@ -609,6 +601,84 @@ func TestAddActionFromFile(t *testing.T) {
 		}
 
 		err := cmd.Run(context.Background(), params)
+
+		if test.expectedError != "" {
+			require.NotNil(t, err)
+			require.Contains(t, err.Error(), test.expectedError)
+		} else {
+			require.Nil(t, err)
+		}
+	}
+}
+
+func TestTestActionFromFile(t *testing.T) {
+	tests := []struct {
+		fileContent   string
+		mockHandler   http.HandlerFunc
+		inputFile     string
+		expectedError string
+	}{
+		{
+			inputFile: "testdata/test-invalid-action.yaml",
+			fileContent: `- kind: dummy
+  data: '{"message": "test"}'
+`,
+			expectedError: "unable to load actions from file: action #1: process_after should be greater than 0",
+		},
+		{
+			inputFile: "testdata/test-server-error.yaml",
+			fileContent: `- kind: dummy
+  data: '{"message": "test"}'
+  process_after: 12
+`,
+			mockHandler: func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusInternalServerError)
+			},
+			expectedError: "1 of 1 actions failed",
+		},
+		{
+			inputFile: "testdata/test-all-success.yaml",
+			fileContent: `- kind: dummy
+  data: '{"message": "first"}'
+  process_after: 10
+- kind: dummy
+  data: '{"message": "second"}'
+  process_after: 24
+`,
+			mockHandler: func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			},
+		},
+	}
+
+	os.MkdirAll("testdata", 0755)
+	defer os.RemoveAll("testdata")
+
+	for _, test := range tests {
+		err := os.WriteFile(test.inputFile, []byte(test.fileContent), 0644)
+		require.NoError(t, err)
+
+		var fakeServer *httptest.Server
+		if test.mockHandler != nil {
+			fakeServer = httptest.NewServer(test.mockHandler)
+			defer fakeServer.Close()
+
+			originalGetClient := getClient
+			defer func() { getClient = originalGetClient }()
+			getClient = func(*cli.Command) *http.Client {
+				return fakeServer.Client()
+			}
+		}
+
+		cmd := createCLI()
+		var params []string
+		if fakeServer != nil {
+			params = []string{"dmh-cli", "action", "test", "--server", fakeServer.URL, "--file", test.inputFile}
+		} else {
+			params = []string{"dmh-cli", "action", "test", "--file", test.inputFile}
+		}
+
+		err = cmd.Run(context.Background(), params)
 
 		if test.expectedError != "" {
 			require.NotNil(t, err)

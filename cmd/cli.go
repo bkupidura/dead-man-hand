@@ -105,16 +105,24 @@ func createCLI() *cli.Command {
 						Usage: "Test action",
 						Flags: []cli.Flag{
 							&cli.StringFlag{
-								Name:     "data",
-								Aliases:  []string{"d"},
-								Usage:    "Action data (json formatted)",
-								Required: true,
+								Name:    "data",
+								Aliases: []string{"d"},
+								Usage:   "Action data (json formatted). Ignored if --file is provided.",
 							},
 							&cli.StringFlag{
-								Name:     "kind",
-								Aliases:  []string{"k"},
-								Usage:    "Action kind",
-								Required: true,
+								Name:    "kind",
+								Aliases: []string{"k"},
+								Usage:   "Action kind. Ignored if --file is provided.",
+							},
+							&cli.IntFlag{
+								Name:    "process-after",
+								Aliases: []string{"p"},
+								Usage:   "Process action after <param> hours from last seen. Required. Ignored if --file is provided.",
+							},
+							&cli.StringFlag{
+								Name:    "file",
+								Aliases: []string{"f"},
+								Usage:   "Path to YAML file containing actions to test. WARNING: ALL actions from file will be executed immediately",
 							},
 						},
 						Action: testAction,
@@ -143,6 +151,136 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+// actionData can unmarshal from both a YAML string and a YAML object/mapping.
+// When a YAML string, it is passed through unchanged.
+// When a YAML object, it is marshaled to a JSON string for the API.
+type actionData struct {
+	Value string
+}
+
+// UnmarshalYAML implements yaml.Unmarshaler.
+func (d *actionData) UnmarshalYAML(node *yaml.Node) error {
+	if node.Kind == yaml.MappingNode {
+		var m map[string]any
+		if err := node.Decode(&m); err != nil {
+			return err
+		}
+		b, err := jsonMarshal(m)
+		if err != nil {
+			return err
+		}
+		d.Value = string(b)
+		return nil
+	}
+	return node.Decode(&d.Value)
+}
+
+// actionFileEntry describes single action read from a YAML file.
+type actionFileEntry struct {
+	Kind         string     `yaml:"kind"`
+	Data         actionData `yaml:"data"`
+	ProcessAfter int        `yaml:"process_after"`
+	MinInterval  int        `yaml:"min_interval"`
+	Comment      string     `yaml:"comment"`
+}
+
+// sendAction validates and sends a single action to given server endpoint.
+func sendAction(cmd *cli.Command, action *state.Action, endpoint string, wantStatus int) error {
+	if err := action.Validate(); err != nil {
+		return err
+	}
+
+	payload, err := jsonMarshal(action)
+	if err != nil {
+		return fmt.Errorf("failed to marshal JSON: %w", err)
+	}
+
+	endpointAddress, err := url.JoinPath(cmd.String("server"), "api", "action", endpoint)
+	if err != nil {
+		return fmt.Errorf("unable to parse address: %s", err)
+	}
+
+	resp, err := getClient(cmd).Post(endpointAddress, "application/json", bytes.NewBuffer(payload))
+	if err != nil {
+		return fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != wantStatus {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("server returned status %d: %s", resp.StatusCode, string(body))
+	}
+	return nil
+}
+
+// createAction validates and sends a single action to the server
+func createAction(cmd *cli.Command, action *state.Action) error {
+	return sendAction(cmd, action, "store", http.StatusCreated)
+}
+
+// sendTestAction validates and sends a single action to the server for immediate execution.
+func sendTestAction(cmd *cli.Command, action *state.Action) error {
+	return sendAction(cmd, action, "test", http.StatusOK)
+}
+
+// loadActionsFromFile reads a YAML file containing a list of actions.
+// It accepts data as either a JSON string or a native YAML object.
+// It validates each entry inline and returns the first validation error found,
+// indexed by position (1-based) so users can fix their file quickly.
+func loadActionsFromFile(path string) ([]*state.Action, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	var rawEntries []*actionFileEntry
+	if err := yaml.Unmarshal(data, &rawEntries); err != nil {
+		return nil, err
+	}
+
+	actions := make([]*state.Action, 0, len(rawEntries))
+	for i, e := range rawEntries {
+		a := &state.Action{
+			Kind:         e.Kind,
+			Data:         e.Data.Value,
+			ProcessAfter: e.ProcessAfter,
+			MinInterval:  e.MinInterval,
+			Comment:      e.Comment,
+		}
+		if err := a.Validate(); err != nil {
+			return nil, fmt.Errorf("action #%d: %w", i+1, err)
+		}
+		actions = append(actions, a)
+	}
+	return actions, nil
+}
+
+// processActionsFromFile loads actions from a YAML file and sends each one with send.
+// All file entries are validated before anything is sent to the server, but server-side
+// failures are reported per action - earlier actions are already sent when a later one fails.
+func processActionsFromFile(cmd *cli.Command, path string, send func(*cli.Command, *state.Action) error) error {
+	actions, err := loadActionsFromFile(path)
+	if err != nil {
+		return fmt.Errorf("unable to load actions from file: %w", err)
+	}
+	if len(actions) == 0 {
+		return fmt.Errorf("no actions found in file")
+	}
+
+	var failed int
+	for i, action := range actions {
+		if err := send(cmd, action); err != nil {
+			fmt.Fprintf(os.Stderr, "action %d: %s\n", i+1, err)
+			failed++
+		}
+	}
+
+	if failed > 0 {
+		return fmt.Errorf("%d of %d actions failed", failed, len(actions))
+	}
+	return nil
 }
 
 func updateAlive(ctx context.Context, cmd *cli.Command) error {
@@ -187,176 +325,28 @@ func listActions(ctx context.Context, cmd *cli.Command) error {
 	return err
 }
 
-// createAction validates and sends a single action to the server
-func createAction(cmd *cli.Command, action *state.Action) error {
-	if err := action.Validate(); err != nil {
-		return err
-	}
-
-	payload, err := jsonMarshal(action)
-	if err != nil {
-		return fmt.Errorf("failed to marshal JSON: %w", err)
-	}
-
-	endpointAddress, err := url.JoinPath(cmd.String("server"), "api", "action", "store")
-	if err != nil {
-		return fmt.Errorf("unable to parse address: %s", err)
-	}
-
-	resp, err := getClient(cmd).Post(endpointAddress, "application/json", bytes.NewBuffer(payload))
-	if err != nil {
-		return fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusCreated {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("server returned status %d: %s", resp.StatusCode, string(body))
-	}
-	return nil
-}
-
 // addAction is the CLI handler. If --file is provided, reads YAML and creates each action.
 // Otherwise creates a single action from flags.
-// All file entries are validated before anything is sent to the server, but server-side
-// failures are reported per action - earlier actions may already be added when a later one fails.
 func addAction(ctx context.Context, cmd *cli.Command) error {
 	if filePath := cmd.String("file"); filePath != "" {
-		actions, err := loadActionsFromFile(filePath)
-		if err != nil {
-			return fmt.Errorf("unable to load actions from file: %w", err)
+		if err := processActionsFromFile(cmd, filePath, createAction); err != nil {
+			return err
 		}
-		if len(actions) == 0 {
-			return fmt.Errorf("no actions found in file")
-		}
-
-		var failed int
-		for i, action := range actions {
-			if err := createAction(cmd, action); err != nil {
-				fmt.Fprintf(os.Stderr, "action %d: %s\n", i+1, err)
-				failed++
-			}
-		}
-
-		if failed > 0 {
-			return fmt.Errorf("%d of %d actions failed to add", failed, len(actions))
-		}
+		fmt.Println("Actions added successfully")
 		return nil
 	}
 
-	return createAction(cmd, &state.Action{
+	if err := createAction(cmd, &state.Action{
 		Kind:         cmd.String("kind"),
 		Data:         cmd.String("data"),
 		ProcessAfter: cmd.Int("process-after"),
 		MinInterval:  cmd.Int("min-interval"),
 		Comment:      cmd.String("comment"),
-	})
-}
-
-// actionData can unmarshal from both a YAML string and a YAML object/mapping.
-// When a YAML string, it is passed through unchanged.
-// When a YAML object, it is marshaled to a JSON string for the API.
-type actionData struct {
-	Value string
-}
-
-// UnmarshalYAML implements yaml.Unmarshaler.
-func (d *actionData) UnmarshalYAML(node *yaml.Node) error {
-	if node.Kind == yaml.MappingNode {
-		var m map[string]any
-		if err := node.Decode(&m); err != nil {
-			return err
-		}
-		b, err := jsonMarshal(m)
-		if err != nil {
-			return err
-		}
-		d.Value = string(b)
-		return nil
-	}
-	return node.Decode(&d.Value)
-}
-
-// actionFileEntry describes single action read from a YAML file.
-type actionFileEntry struct {
-	Kind         string     `yaml:"kind"`
-	Data         actionData `yaml:"data"`
-	ProcessAfter int        `yaml:"process_after"`
-	MinInterval  int        `yaml:"min_interval"`
-	Comment      string     `yaml:"comment"`
-}
-
-// loadActionsFromFile reads a YAML file containing a list of actions.
-// It accepts data as either a JSON string or a native YAML object.
-// It validates each entry inline and returns the first validation error found,
-// indexed by position (1-based) so users can fix their file quickly.
-func loadActionsFromFile(path string) ([]*state.Action, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
+	}); err != nil {
+		return err
 	}
 
-	var rawEntries []*actionFileEntry
-	if err := yaml.Unmarshal(data, &rawEntries); err != nil {
-		return nil, err
-	}
-
-	actions := make([]*state.Action, 0, len(rawEntries))
-	for i, e := range rawEntries {
-		a := &state.Action{
-			Kind:         e.Kind,
-			Data:         e.Data.Value,
-			ProcessAfter: e.ProcessAfter,
-			MinInterval:  e.MinInterval,
-			Comment:      e.Comment,
-		}
-		if err := a.Validate(); err != nil {
-			return nil, fmt.Errorf("action #%d: %w", i+1, err)
-		}
-		actions = append(actions, a)
-	}
-	return actions, nil
-}
-
-func testAction(ctx context.Context, cmd *cli.Command) error {
-	data := cmd.String("data")
-	kind := cmd.String("kind")
-
-	if data == "" {
-		return fmt.Errorf("data is required")
-	}
-	if kind == "" {
-		return fmt.Errorf("kind is required")
-	}
-
-	payload := map[string]any{
-		"kind":          kind,
-		"data":          data,
-		"process_after": 10,
-	}
-
-	jsonData, err := jsonMarshal(payload)
-	if err != nil {
-		return fmt.Errorf("failed to marshal JSON: %w", err)
-	}
-
-	endpointAddress, err := url.JoinPath(cmd.String("server"), "api", "action", "test")
-	if err != nil {
-		return fmt.Errorf("unable to parse address: %s", err)
-	}
-
-	resp, err := getClient(cmd).Post(endpointAddress, "application/json", bytes.NewBuffer(jsonData))
-	if err != nil {
-		return fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("server returned status %d: %s", resp.StatusCode, string(body))
-	}
-
-	fmt.Println("Action tested successfully")
+	fmt.Println("Action added successfully")
 	return nil
 }
 
@@ -391,5 +381,28 @@ func deleteAction(ctx context.Context, cmd *cli.Command) error {
 	}
 
 	fmt.Println("Action deleted successfully")
+	return nil
+}
+
+// testAction is the CLI handler. If --file is provided, reads YAML and tests each action.
+// Otherwise tests a single action from flags.
+func testAction(ctx context.Context, cmd *cli.Command) error {
+	if filePath := cmd.String("file"); filePath != "" {
+		if err := processActionsFromFile(cmd, filePath, sendTestAction); err != nil {
+			return err
+		}
+		fmt.Println("Actions tested successfully")
+		return nil
+	}
+
+	if err := sendTestAction(cmd, &state.Action{
+		Kind:         cmd.String("kind"),
+		Data:         cmd.String("data"),
+		ProcessAfter: cmd.Int("process-after"),
+	}); err != nil {
+		return err
+	}
+
+	fmt.Println("Action tested successfully")
 	return nil
 }
