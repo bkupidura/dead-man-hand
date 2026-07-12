@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"slices"
+	"strings"
 	"time"
 
 	"dmh/internal/api"
@@ -48,6 +49,10 @@ func main() {
 
 	if slices.Contains(enabledComponents, "dmh") && slices.Contains(enabledComponents, "vault") {
 		log.Printf("dmh and vault component enabled. THIS IS NOT RECOMMENDED FOR SECURITY REASONS!")
+	}
+
+	if slices.Contains(enabledComponents, "dmh") && strings.HasPrefix(strings.ToLower(k.String("remote_vault.url")), "http://") {
+		log.Printf("remote_vault.url uses plain http://, action encryption keys will be sent over network UNENCRYPTED. THIS IS NOT RECOMMENDED FOR SECURITY REASONS!")
 	}
 
 	var s state.StateInterface
