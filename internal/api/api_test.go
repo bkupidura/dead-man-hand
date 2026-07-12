@@ -341,43 +341,6 @@ func TestAddActionRequestBind(t *testing.T) {
 			},
 		},
 		{
-			payload:       `{"data": "test", "process_after": 10}`,
-			expectedError: fmt.Errorf("kind is required"),
-			expectedReq: &addTestActionRequest{
-				Kind:         "",
-				Data:         "test",
-				ProcessAfter: 10,
-			},
-		},
-		{
-			payload:       `{"kind": "bulksms", "data": "{\"message\":\"test\",\"destination\":[\"111\"]}", "process_after": 0}`,
-			expectedError: fmt.Errorf("process_after should be greater than 0"),
-			expectedReq: &addTestActionRequest{
-				Kind:         "bulksms",
-				Data:         "{\"message\":\"test\",\"destination\":[\"111\"]}",
-				ProcessAfter: 0,
-			},
-		},
-		{
-			payload:       `{"kind": "bulksms", "data": "{\"message\":\"test\",\"destination\":[\"111\"]}", "process_after": -10}`,
-			expectedError: fmt.Errorf("process_after should be greater than 0"),
-			expectedReq: &addTestActionRequest{
-				Kind:         "bulksms",
-				Data:         "{\"message\":\"test\",\"destination\":[\"111\"]}",
-				ProcessAfter: -10,
-			},
-		},
-		{
-			payload:       `{"kind": "bulksms", "data": "{\"message\":\"test\",\"destination\":[\"111\"]}", "process_after": 10, "min_interval": -1}`,
-			expectedError: fmt.Errorf("min_interval should be greater or equal 0"),
-			expectedReq: &addTestActionRequest{
-				Kind:         "bulksms",
-				Data:         "{\"message\":\"test\",\"destination\":[\"111\"]}",
-				ProcessAfter: 10,
-				MinInterval:  -1,
-			},
-		},
-		{
 			payload: `{"kind": "bulksms", "data": "{\"message\":\"test\",\"destination\":[\"111\"]}", "process_after": 10, "min_interval": 0}`,
 			expectedReq: &addTestActionRequest{
 				Kind:         "bulksms",

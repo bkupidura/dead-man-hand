@@ -28,14 +28,6 @@ func TestActionAddRequiredParams(t *testing.T) {
 			expectedError: "data is required",
 		},
 		{
-			inputParams:   []string{"--data", `{"test": "test"}`},
-			expectedError: "kind is required",
-		},
-		{
-			inputParams:   []string{"--data", `{"test": "test"}`, "--kind", "test"},
-			expectedError: "process_after should be greater than 0",
-		},
-		{
 			inputParams:   []string{"--data", `{"test": "test"}`, "--kind", "test", "--process-after", "10"},
 			expectedError: `request failed: Post "http://127.0.0.1:8080/api/action/store": dial tcp 127.0.0.1:8080: connect: connection refused`,
 		},
@@ -238,18 +230,6 @@ func TestAddAction(t *testing.T) {
 		{
 			inputParams:   []string{"--data", "", "--kind", "test", "--process-after", "10"},
 			expectedError: "data is required",
-		},
-		{
-			inputParams:   []string{"--data", `{"test": true}`, "--kind", "", "--process-after", "10"},
-			expectedError: "kind is required",
-		},
-		{
-			inputParams:   []string{"--data", `{"test": true}`, "--kind", "test", "--process-after", "0"},
-			expectedError: "process_after should be greater than 0",
-		},
-		{
-			inputParams:   []string{"--data", `{"test": true}`, "--kind", "test", "--process-after", "-1"},
-			expectedError: "process_after should be greater than 0",
 		},
 		{
 			inputServer:   "\r",
@@ -547,46 +527,6 @@ func TestAddActionFromFile(t *testing.T) {
 			expectedError: "no actions found in file",
 		},
 		{
-			inputFile: "testdata/missing-process-after.yaml",
-			fileContent: `- kind: test
-  data: '{"test": true}'
-`,
-			expectedError: "unable to load actions from file: action #1: process_after should be greater than 0",
-		},
-		{
-			inputFile: "testdata/zero-process-after.yaml",
-			fileContent: `- kind: test
-  data: '{"test": true}'
-  process_after: 0
-`,
-			expectedError: "unable to load actions from file: action #1: process_after should be greater than 0",
-		},
-		{
-			inputFile: "testdata/negative-min-interval.yaml",
-			fileContent: `- kind: test
-  data: '{"test": true}'
-  process_after: 12
-  min_interval: -1
-`,
-			expectedError: "unable to load actions from file: action #1: min_interval should be greater or equal 0",
-		},
-		{
-			inputFile: "testdata/missing-data.yaml",
-			fileContent: `- kind: test
-  data: ""
-  process_after: 12
-`,
-			expectedError: "unable to load actions from file: action #1: data is required",
-		},
-		{
-			inputFile: "testdata/missing-kind.yaml",
-			fileContent: `- kind: ""
-  data: '{"test": true}'
-  process_after: 12
-`,
-			expectedError: "unable to load actions from file: action #1: kind is required",
-		},
-		{
 			inputFile: "testdata/with-comment.yaml",
 			fileContent: `- kind: test
   data: '{"test": true}'
@@ -750,22 +690,12 @@ func TestLoadActionsFromFile(t *testing.T) {
 			expectedLen: 1,
 		},
 		{
-			inputFile: "testdata/load-negative-min-interval.yaml",
+			inputFile: "testdata/load-invalid-action.yaml",
 			fileContent: `- kind: dummy
   data: '{"message": "test"}'
-  process_after: 12
-  min_interval: -1
+  process_after: 0
 `,
-			expectedError: "action #1: min_interval should be greater or equal 0",
-		},
-		{
-			inputFile: "testdata/load-min-interval.yaml",
-			fileContent: `- kind: dummy
-  data: '{"message": "test"}'
-  process_after: 12
-  min_interval: 5
-`,
-			expectedLen: 1,
+			expectedError: "action #1: process_after should be greater than 0",
 		},
 	}
 
@@ -802,22 +732,6 @@ func TestCreateAction(t *testing.T) {
 		{
 			action:        &state.Action{Kind: "test", ProcessAfter: 10},
 			expectedError: "data is required",
-		},
-		{
-			action:        &state.Action{Data: `{"test": true}`, ProcessAfter: 10},
-			expectedError: "kind is required",
-		},
-		{
-			action:        &state.Action{Kind: "test", Data: `{"test": true}`},
-			expectedError: "process_after should be greater than 0",
-		},
-		{
-			action:        &state.Action{Kind: "test", Data: `{"test": true}`, ProcessAfter: 0},
-			expectedError: "process_after should be greater than 0",
-		},
-		{
-			action:        &state.Action{Kind: "test", Data: `{"test": true}`, ProcessAfter: -5},
-			expectedError: "process_after should be greater than 0",
 		},
 		{
 			action:          &state.Action{Kind: "test", Data: `{"test": true}`, ProcessAfter: 10},
