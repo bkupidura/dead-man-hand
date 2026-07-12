@@ -13,7 +13,10 @@ import (
 
 var (
 	// mocks for tests
-	osCreate = func(name string) (io.WriteCloser, error) { return os.Create(name) }
+	osOpenFile = func(name string) (io.WriteCloser, error) {
+		return os.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+	}
+	osChmod  = os.Chmod
 	cryptNew = crypt.New
 )
 
@@ -70,6 +73,11 @@ func New(opts *Options) (VaultInterface, error) {
 		return v, nil
 	}
 	defer f.Close()
+
+	// Best-effort: chmod can fail on some volumes and must not stop startup.
+	if err := osChmod(v.savePath, 0600); err != nil {
+		log.Printf("unable to change vault file permissions to 600: %s", err)
+	}
 
 	err = json.NewDecoder(f).Decode(&v.data)
 	if err != nil {
@@ -193,7 +201,7 @@ func (v *Vault) ensureClientUUID(clientUUID string) {
 
 // save dumps Vault content to disk on every change.
 func (v *Vault) save() {
-	f, err := osCreate(v.savePath)
+	f, err := osOpenFile(v.savePath)
 	if err != nil {
 		log.Panicf("unable to dump state: %s", err)
 	}

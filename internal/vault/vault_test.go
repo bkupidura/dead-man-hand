@@ -988,10 +988,10 @@ func TestDeleteSecret(t *testing.T) {
 
 func TestSave(t *testing.T) {
 	tests := []struct {
-		inputData    func() map[string]*VaultData
-		expectedData string
-		mockOsCreate func(string) (io.WriteCloser, error)
-		shouldPanic  bool
+		inputData      func() map[string]*VaultData
+		expectedData   string
+		mockOsOpenFile func(string) (io.WriteCloser, error)
+		shouldPanic    bool
 	}{
 		{
 			inputData: func() map[string]*VaultData {
@@ -1016,8 +1016,8 @@ func TestSave(t *testing.T) {
 				}
 				return d
 			},
-			mockOsCreate: func(string) (io.WriteCloser, error) { return nil, fmt.Errorf("mockOsCreate error") },
-			shouldPanic:  true,
+			mockOsOpenFile: func(string) (io.WriteCloser, error) { return nil, fmt.Errorf("mockOsOpenFile error") },
+			shouldPanic:    true,
 		},
 		{
 			inputData: func() map[string]*VaultData {
@@ -1058,7 +1058,7 @@ func TestSave(t *testing.T) {
 			inputData: func() map[string]*VaultData {
 				return map[string]*VaultData{"fail": {Secrets: map[string]*Secret{}}}
 			},
-			mockOsCreate: func(string) (io.WriteCloser, error) {
+			mockOsOpenFile: func(string) (io.WriteCloser, error) {
 				fw := &failWriter{}
 				fw.On("Write", mock.Anything).Return(0, fmt.Errorf("failWriter error"))
 				fw.On("Close").Return(nil)
@@ -1067,14 +1067,14 @@ func TestSave(t *testing.T) {
 			shouldPanic: true,
 		},
 	}
-	oldOsCreate := osCreate
+	oldOsOpenFile := osOpenFile
 	for _, test := range tests {
-		osCreate = oldOsCreate
+		osOpenFile = oldOsOpenFile
 		defer func() {
-			osCreate = oldOsCreate
+			osOpenFile = oldOsOpenFile
 		}()
-		if test.mockOsCreate != nil {
-			osCreate = test.mockOsCreate
+		if test.mockOsOpenFile != nil {
+			osOpenFile = test.mockOsOpenFile
 		}
 
 		os.Remove("test_vault.json")
@@ -1094,4 +1094,53 @@ func TestSave(t *testing.T) {
 			require.Equal(t, test.expectedData, string(data))
 		}
 	}
+}
+
+func TestOsOpenFileUsesRestrictivePermissions(t *testing.T) {
+	path := "test_perms_vault.json"
+	os.Remove(path)
+	defer os.Remove(path)
+
+	f, err := osOpenFile(path)
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	require.Equal(t, os.FileMode(0600), info.Mode().Perm())
+
+	// Open failure (missing directory) must surface as an error.
+	_, err = osOpenFile("nonexistent-dir/vault.json")
+	require.Error(t, err)
+}
+
+func TestNewTightensExistingFilePermissions(t *testing.T) {
+	path := "test_perms_new_vault.json"
+	os.Remove(path)
+	defer os.Remove(path)
+
+	// World-readable file left by an older version.
+	require.NoError(t, os.WriteFile(path, []byte(`{}`), 0644))
+
+	_, err := New(&Options{SavePath: path, SecretProcessUnit: time.Hour})
+	require.NoError(t, err)
+
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	require.Equal(t, os.FileMode(0600), info.Mode().Perm())
+}
+
+func TestNewChmodFailureIsNotFatal(t *testing.T) {
+	path := "test_chmod_vault.json"
+	os.Remove(path)
+	defer os.Remove(path)
+
+	require.NoError(t, os.WriteFile(path, []byte(`{}`), 0644))
+
+	oldOsChmod := osChmod
+	defer func() { osChmod = oldOsChmod }()
+	osChmod = func(string, os.FileMode) error { return fmt.Errorf("mockOsChmod error") }
+
+	_, err := New(&Options{SavePath: path, SecretProcessUnit: time.Hour})
+	require.NoError(t, err)
 }

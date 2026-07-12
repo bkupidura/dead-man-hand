@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"slices"
+	"strings"
 	"time"
 
 	"dmh/internal/api"
@@ -48,6 +49,10 @@ func main() {
 
 	if slices.Contains(enabledComponents, "dmh") && slices.Contains(enabledComponents, "vault") {
 		log.Printf("dmh and vault component enabled. THIS IS NOT RECOMMENDED FOR SECURITY REASONS!")
+	}
+
+	if slices.Contains(enabledComponents, "dmh") && strings.HasPrefix(strings.ToLower(k.String("remote_vault.url")), "http://") {
+		log.Printf("remote_vault.url uses plain http://, action encryption keys will be sent over network UNENCRYPTED. THIS IS NOT RECOMMENDED FOR SECURITY REASONS!")
 	}
 
 	var s state.StateInterface
@@ -103,9 +108,18 @@ func main() {
 		VaultClientUUID: k.String("remote_vault.client_uuid"),
 		DMHEnabled:      slices.Contains(enabledComponents, "dmh"),
 		VaultEnabled:    slices.Contains(enabledComponents, "vault"),
+		Debug:           k.Bool("debug"),
 	})
 
-	http.ListenAndServe(fmt.Sprintf(":%d", api.HTTPPort), httpRouter)
+	httpServer := &http.Server{
+		Addr:         fmt.Sprintf(":%d", api.HTTPPort),
+		Handler:      httpRouter,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	log.Fatal(httpServer.ListenAndServe())
 }
 
 func dispatcher(s state.StateInterface, e execute.ExecuteInterface, m *metric.PromCollector, actionProcessUnit time.Duration, chStop chan bool) {

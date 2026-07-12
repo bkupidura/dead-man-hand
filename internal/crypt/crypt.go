@@ -65,7 +65,9 @@ func (c *Crypt) Encrypt(data string) (string, error) {
 	if _, err := ioWriteString(w, data); err != nil {
 		return "", err
 	}
-	w.Close()
+	if err := w.Close(); err != nil {
+		return "", err
+	}
 	return base64.StdEncoding.EncodeToString(out.Bytes()), nil
 }
 

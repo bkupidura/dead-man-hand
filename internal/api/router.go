@@ -16,7 +16,9 @@ func NewRouter(opts *Options) *chi.Mux {
 		r.Get("/ready", healthHandler())
 		r.Get("/healthz", healthHandler())
 		r.Method("GET", "/metrics", promhttp.Handler())
-		r.Mount("/debug", middleware.Profiler())
+		if opts.Debug {
+			r.Mount("/debug", middleware.Profiler())
+		}
 		if opts.DMHEnabled {
 			r.Route("/api/alive", func(r chi.Router) {
 				r.Get("/", aliveHandler(opts.State, opts.VaultURL, opts.VaultClientUUID))

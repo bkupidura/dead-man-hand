@@ -248,6 +248,22 @@ func TestNewRouter(t *testing.T) {
 			path:       "/api/vault/store/client-uuid/secret-uuid",
 			statusCode: http.StatusNotFound,
 		},
+		{
+			inputOptions: func() *Options {
+				return &Options{State: new(mockState), Debug: true}
+			},
+			method:     "GET",
+			path:       "/debug/pprof/",
+			statusCode: http.StatusOK,
+		},
+		{
+			inputOptions: func() *Options {
+				return &Options{State: new(mockState)}
+			},
+			method:     "GET",
+			path:       "/debug/pprof/",
+			statusCode: http.StatusNotFound,
+		},
 	}
 
 	for _, test := range tests {

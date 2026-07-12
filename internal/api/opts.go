@@ -18,4 +18,5 @@ type Options struct {
 	VaultClientUUID string
 	DMHEnabled      bool
 	VaultEnabled    bool
+	Debug           bool
 }

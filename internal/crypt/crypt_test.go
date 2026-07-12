@@ -1,6 +1,7 @@
 package crypt
 
 import (
+	"bytes"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -10,6 +11,15 @@ import (
 	"filippo.io/age"
 	"github.com/stretchr/testify/require"
 )
+
+// failCloseWriteCloser writes to an underlying buffer but always fails on Close.
+type failCloseWriteCloser struct {
+	io.Writer
+}
+
+func (f *failCloseWriteCloser) Close() error {
+	return fmt.Errorf("mockClose error")
+}
 
 func TestNew(t *testing.T) {
 	tests := []struct {
@@ -80,6 +90,15 @@ func TestEncrypt(t *testing.T) {
 			expectedOutput:    "",
 			expectedError:     fmt.Errorf("mockIoWriteString error"),
 			mockIoWriteString: func(w io.Writer, s string) (n int, err error) { return 0, fmt.Errorf("mockIoWriteString error") },
+		},
+		{
+			inputKey:       "AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0",
+			inputData:      "test",
+			expectedOutput: "",
+			expectedError:  fmt.Errorf("mockClose error"),
+			mockAgeEncrypt: func(dst io.Writer, recipients ...age.Recipient) (io.WriteCloser, error) {
+				return &failCloseWriteCloser{Writer: &bytes.Buffer{}}, nil
+			},
 		},
 		{
 			inputKey:       "AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0",

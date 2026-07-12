@@ -19,8 +19,11 @@ import (
 
 var (
 	// mocks for tests
-	cryptNew    = crypt.New
-	osCreate    = func(name string) (io.WriteCloser, error) { return os.Create(name) }
+	cryptNew   = crypt.New
+	osOpenFile = func(name string) (io.WriteCloser, error) {
+		return os.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+	}
+	osChmod     = os.Chmod
 	jsonMarshal = json.Marshal
 )
 
@@ -117,6 +120,11 @@ func New(opts *Options) (StateInterface, error) {
 		return state, nil
 	}
 	defer f.Close()
+
+	// Best-effort: chmod can fail on some volumes and must not stop startup.
+	if err := osChmod(state.savePath, 0600); err != nil {
+		log.Printf("unable to change state file permissions to 600: %s", err)
+	}
 
 	err = json.NewDecoder(f).Decode(state.data)
 	if err != nil {
@@ -328,7 +336,7 @@ func (s *State) DecryptAction(u string) (*Action, error) {
 // save dumps state to disk.
 // save will panic when this is not possible.
 func (s *State) save() {
-	f, err := osCreate(s.savePath)
+	f, err := osOpenFile(s.savePath)
 	if err != nil {
 		log.Panicf("unable to dump state: %s", err)
 	}
