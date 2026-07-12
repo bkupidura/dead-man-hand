@@ -103,6 +103,7 @@ func main() {
 		VaultClientUUID: k.String("remote_vault.client_uuid"),
 		DMHEnabled:      slices.Contains(enabledComponents, "dmh"),
 		VaultEnabled:    slices.Contains(enabledComponents, "vault"),
+		Debug:           k.Bool("debug"),
 	})
 
 	http.ListenAndServe(fmt.Sprintf(":%d", api.HTTPPort), httpRouter)
