@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"dmh/internal/state"
 )
@@ -61,7 +62,7 @@ func (d *ExecuteBulkSMS) Run() error {
 	authPair := fmt.Sprintf("%s:%s", d.config.Token.ID, d.config.Token.Secret)
 	req.Header.Set("Authorization", fmt.Sprintf("Basic %s", base64.StdEncoding.EncodeToString([]byte(authPair))))
 
-	client := &http.Client{}
+	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return err

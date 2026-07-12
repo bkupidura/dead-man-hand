@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"time"
 
 	"dmh/internal/execute"
 	"dmh/internal/state"
@@ -13,6 +14,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 )
+
+// httpClient is used for the outbound http connections.
+var httpClient = &http.Client{Timeout: 30 * time.Second}
 
 // ErrResponse is generic error code struct.
 type ErrResponse struct {
@@ -103,7 +107,7 @@ func aliveHandler(s state.StateInterface, vaultURL string, vaultClientUUID strin
 			return
 		}
 
-		resp, err := http.Get(endpointAddress)
+		resp, err := httpClient.Get(endpointAddress)
 		if err != nil {
 			log.Printf("unable to connect to vault: %s", err)
 			render.Render(w, r, StatusErrInternal(nil))

@@ -25,6 +25,8 @@ var (
 	}
 	osChmod     = os.Chmod
 	jsonMarshal = json.Marshal
+	// httpClient is used for the outbound http connections.
+	httpClient = &http.Client{Timeout: 30 * time.Second}
 )
 
 // Action stores user actions.
@@ -213,7 +215,7 @@ func (s *State) AddAction(a *Action) error {
 		return err
 	}
 
-	resp, err := http.Post(encrypted.EncryptionMeta.VaultURL, "application/json", bytes.NewBuffer(vaultSecretJson))
+	resp, err := httpClient.Post(encrypted.EncryptionMeta.VaultURL, "application/json", bytes.NewBuffer(vaultSecretJson))
 	if err != nil {
 		return err
 	}
@@ -272,8 +274,7 @@ func (s *State) MarkActionAsProcessed(u string) error {
 		return err
 	}
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -298,7 +299,7 @@ func (s *State) DecryptAction(u string) (*Action, error) {
 		return nil, fmt.Errorf("missing action with uuid %s", u)
 	}
 
-	resp, err := http.Get(encryptedAction.EncryptionMeta.VaultURL)
+	resp, err := httpClient.Get(encryptedAction.EncryptionMeta.VaultURL)
 	if err != nil {
 		return nil, err
 	}
