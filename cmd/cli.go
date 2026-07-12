@@ -196,7 +196,7 @@ func createAction(cmd *cli.Command, action *state.Action) error {
 		return fmt.Errorf("kind is required")
 	}
 	if action.ProcessAfter <= 0 {
-		return fmt.Errorf("process-after is required and must be > 0")
+		return fmt.Errorf("process-after must be positive")
 	}
 
 	payload, err := jsonMarshal(action)
@@ -224,6 +224,8 @@ func createAction(cmd *cli.Command, action *state.Action) error {
 
 // addAction is the CLI handler. If --file is provided, reads YAML and creates each action.
 // Otherwise creates a single action from flags.
+// All file entries are validated before anything is sent to the server, but server-side
+// failures are reported per action - earlier actions may already be added when a later one fails.
 func addAction(ctx context.Context, cmd *cli.Command) error {
 	if filePath := cmd.String("file"); filePath != "" {
 		actions, err := loadActionsFromFile(filePath)
@@ -257,16 +259,76 @@ func addAction(ctx context.Context, cmd *cli.Command) error {
 	})
 }
 
-// loadActionsFromFile reads a YAML file containing a list of actions
+// actionData can unmarshal from both a YAML string and a YAML object/mapping.
+// When a YAML string, it is passed through unchanged.
+// When a YAML object, it is marshaled to a JSON string for the API.
+type actionData struct {
+	Value string
+}
+
+// UnmarshalYAML implements yaml.Unmarshaler.
+func (d *actionData) UnmarshalYAML(node *yaml.Node) error {
+	if node.Kind == yaml.MappingNode {
+		var m map[string]any
+		if err := node.Decode(&m); err != nil {
+			return err
+		}
+		b, err := jsonMarshal(m)
+		if err != nil {
+			return err
+		}
+		d.Value = string(b)
+		return nil
+	}
+	return node.Decode(&d.Value)
+}
+
+// actionFileEntry describes single action read from a YAML file.
+type actionFileEntry struct {
+	Kind         string     `yaml:"kind"`
+	Data         actionData `yaml:"data"`
+	ProcessAfter int        `yaml:"process_after"`
+	MinInterval  int        `yaml:"min_interval"`
+	Comment      string     `yaml:"comment"`
+}
+
+// loadActionsFromFile reads a YAML file containing a list of actions.
+// It accepts data as either a JSON string or a native YAML object.
+// It validates each entry inline and returns the first validation error found,
+// indexed by position (1-based) so users can fix their file quickly.
 func loadActionsFromFile(path string) ([]*state.Action, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
 
-	var actions []*state.Action
-	if err := yaml.Unmarshal(data, &actions); err != nil {
+	var rawEntries []*actionFileEntry
+	if err := yaml.Unmarshal(data, &rawEntries); err != nil {
 		return nil, err
+	}
+
+	actions := make([]*state.Action, 0, len(rawEntries))
+	for i, e := range rawEntries {
+		a := &state.Action{
+			Kind:         e.Kind,
+			Data:         e.Data.Value,
+			ProcessAfter: e.ProcessAfter,
+			MinInterval:  e.MinInterval,
+			Comment:      e.Comment,
+		}
+		if e.Data.Value == "" {
+			return nil, fmt.Errorf("action #%d: data is required", i+1)
+		}
+		if a.Kind == "" {
+			return nil, fmt.Errorf("action #%d: kind is required", i+1)
+		}
+		if a.ProcessAfter <= 0 {
+			return nil, fmt.Errorf("action #%d: process-after must be positive", i+1)
+		}
+		if a.MinInterval < 0 {
+			return nil, fmt.Errorf("action #%d: min-interval must be greater or equal 0", i+1)
+		}
+		actions = append(actions, a)
 	}
 	return actions, nil
 }

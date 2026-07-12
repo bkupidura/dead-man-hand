@@ -15,6 +15,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/urfave/cli/v3"
+	"gopkg.in/yaml.v3"
 )
 
 func TestActionAddRequiredParams(t *testing.T) {
@@ -32,7 +33,7 @@ func TestActionAddRequiredParams(t *testing.T) {
 		},
 		{
 			inputParams:   []string{"--data", `{"test": "test"}`, "--kind", "test"},
-			expectedError: "process-after is required and must be > 0",
+			expectedError: "process-after must be positive",
 		},
 		{
 			inputParams:   []string{"--data", `{"test": "test"}`, "--kind", "test", "--process-after", "10"},
@@ -244,11 +245,11 @@ func TestAddAction(t *testing.T) {
 		},
 		{
 			inputParams:   []string{"--data", `{"test": true}`, "--kind", "test", "--process-after", "0"},
-			expectedError: "process-after is required and must be > 0",
+			expectedError: "process-after must be positive",
 		},
 		{
 			inputParams:   []string{"--data", `{"test": true}`, "--kind", "test", "--process-after", "-1"},
-			expectedError: "process-after is required and must be > 0",
+			expectedError: "process-after must be positive",
 		},
 		{
 			inputServer:   "\r",
@@ -550,7 +551,7 @@ func TestAddActionFromFile(t *testing.T) {
 			fileContent: `- kind: test
   data: '{"test": true}'
 `,
-			expectedError: "1 of 1 actions failed to add",
+			expectedError: "unable to load actions from file: action #1: process-after must be positive",
 		},
 		{
 			inputFile: "testdata/zero-process-after.yaml",
@@ -558,7 +559,16 @@ func TestAddActionFromFile(t *testing.T) {
   data: '{"test": true}'
   process_after: 0
 `,
-			expectedError: "1 of 1 actions failed to add",
+			expectedError: "unable to load actions from file: action #1: process-after must be positive",
+		},
+		{
+			inputFile: "testdata/negative-min-interval.yaml",
+			fileContent: `- kind: test
+  data: '{"test": true}'
+  process_after: 12
+  min_interval: -1
+`,
+			expectedError: "unable to load actions from file: action #1: min-interval must be greater or equal 0",
 		},
 		{
 			inputFile: "testdata/missing-data.yaml",
@@ -566,7 +576,7 @@ func TestAddActionFromFile(t *testing.T) {
   data: ""
   process_after: 12
 `,
-			expectedError: "1 of 1 actions failed to add",
+			expectedError: "unable to load actions from file: action #1: data is required",
 		},
 		{
 			inputFile: "testdata/missing-kind.yaml",
@@ -574,7 +584,7 @@ func TestAddActionFromFile(t *testing.T) {
   data: '{"test": true}'
   process_after: 12
 `,
-			expectedError: "1 of 1 actions failed to add",
+			expectedError: "unable to load actions from file: action #1: kind is required",
 		},
 		{
 			inputFile: "testdata/with-comment.yaml",
@@ -599,7 +609,7 @@ func TestAddActionFromFile(t *testing.T) {
 			mockHandler: func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusCreated)
 			},
-			expectedError: "1 of 2 actions failed to add",
+			expectedError: "unable to load actions from file: action #2: data is required",
 		},
 		{
 			inputFile: "testdata/server-error.yaml",
@@ -695,6 +705,68 @@ func TestLoadActionsFromFile(t *testing.T) {
 			fileContent: "",
 			expectedLen: 0,
 		},
+		{
+			inputFile: "testdata/native-single.yaml",
+			fileContent: `- kind: dummy
+  data:
+    message: test message
+    fail_on_run: false
+  process_after: 12
+`,
+			expectedLen: 1,
+		},
+		{
+			inputFile: "testdata/native-multiple.yaml",
+			fileContent: `- kind: dummy
+  data:
+    message: first
+  process_after: 10
+- kind: dummy
+  data:
+    message: second
+  process_after: 20
+`,
+			expectedLen: 2,
+		},
+		{
+			inputFile: "testdata/native-mixed.yaml",
+			fileContent: `- kind: dummy
+  data: '{"message": "string format"}'
+  process_after: 10
+- kind: dummy
+  data:
+    message: native format
+  process_after: 20
+`,
+			expectedLen: 2,
+		},
+		{
+			inputFile: "testdata/native-empty-msg.yaml",
+			fileContent: `- kind: dummy
+  data:
+    message: ""
+  process_after: 12
+`,
+			expectedLen: 1,
+		},
+		{
+			inputFile: "testdata/load-negative-min-interval.yaml",
+			fileContent: `- kind: dummy
+  data: '{"message": "test"}'
+  process_after: 12
+  min_interval: -1
+`,
+			expectedError: "action #1: min-interval must be greater or equal 0",
+		},
+		{
+			inputFile: "testdata/load-min-interval.yaml",
+			fileContent: `- kind: dummy
+  data: '{"message": "test"}'
+  process_after: 12
+  min_interval: 5
+`,
+			expectedLen: 1,
+		},
 	}
 
 	os.MkdirAll("testdata", 0755)
@@ -737,15 +809,15 @@ func TestCreateAction(t *testing.T) {
 		},
 		{
 			action:        &state.Action{Kind: "test", Data: `{"test": true}`},
-			expectedError: "process-after is required and must be > 0",
+			expectedError: "process-after must be positive",
 		},
 		{
 			action:        &state.Action{Kind: "test", Data: `{"test": true}`, ProcessAfter: 0},
-			expectedError: "process-after is required and must be > 0",
+			expectedError: "process-after must be positive",
 		},
 		{
 			action:        &state.Action{Kind: "test", Data: `{"test": true}`, ProcessAfter: -5},
-			expectedError: "process-after is required and must be > 0",
+			expectedError: "process-after must be positive",
 		},
 		{
 			action:          &state.Action{Kind: "test", Data: `{"test": true}`, ProcessAfter: 10},
@@ -835,4 +907,56 @@ func TestGetClient(t *testing.T) {
 	client := getClient(nil)
 	require.NotNil(t, client)
 	require.Equal(t, 5*time.Second, client.Timeout)
+}
+
+func TestActionDataUnmarshalYAML(t *testing.T) {
+	tests := []struct {
+		yamlStr     string
+		expected    string
+		expectError bool
+	}{
+		{
+			yamlStr:  "data: '{\"message\": \"hello\"}'",
+			expected: "{\"message\": \"hello\"}",
+		},
+		{
+			yamlStr:  "data:\n  message: hello\n  count: 5",
+			expected: `{"count":5,"message":"hello"}`,
+		},
+		{
+			yamlStr: `data:
+  message: Hello
+  destination:
+    - "12345"
+    - "67890"`,
+			expected: `{"destination":["12345","67890"],"message":"Hello"}`,
+		},
+		{
+			yamlStr: `data:
+  enabled: true
+  disabled: false`,
+			expected: `{"disabled":false,"enabled":true}`,
+		},
+		{
+			yamlStr:  `data: ""`,
+			expected: ``,
+		},
+		{
+			yamlStr:  `data:`,
+			expected: ``,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run("", func(t *testing.T) {
+			var entry actionFileEntry
+			err := yaml.Unmarshal([]byte(tt.yamlStr), &entry)
+			if tt.expectError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tt.expected, entry.Data.Value)
+			}
+		})
+	}
 }
