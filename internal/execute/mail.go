@@ -1,16 +1,21 @@
 package execute
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net/mail"
 	"slices"
+	"time"
 
 	"dmh/internal/state"
 
 	gomail "github.com/wneessen/go-mail"
 )
+
+// mailTimeout bounds the entire SMTP exchange (dial + send) for a single action.
+const mailTimeout = 30 * time.Second
 
 type MailConfig struct {
 	Username    string `koanf:"username"`
@@ -44,9 +49,9 @@ func (d *ExecuteMail) Run() error {
 	var err error
 
 	if d.config.Username != "" {
-		client, err = gomail.NewClient(d.config.Server, tlsPolicy, gomail.WithSMTPAuth(gomail.SMTPAuthPlain), gomail.WithUsername(d.config.Username), gomail.WithPassword(d.config.Password))
+		client, err = gomail.NewClient(d.config.Server, tlsPolicy, gomail.WithSMTPAuth(gomail.SMTPAuthPlain), gomail.WithUsername(d.config.Username), gomail.WithPassword(d.config.Password), gomail.WithTimeout(mailTimeout))
 	} else {
-		client, err = gomail.NewClient(d.config.Server, tlsPolicy)
+		client, err = gomail.NewClient(d.config.Server, tlsPolicy, gomail.WithTimeout(mailTimeout))
 	}
 
 	if err != nil {
@@ -70,7 +75,10 @@ func (d *ExecuteMail) Run() error {
 	message.Subject(d.Subject)
 	message.SetBodyString(gomail.TypeTextPlain, d.Message)
 
-	if err := client.DialAndSend(message); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), mailTimeout)
+	defer cancel()
+
+	if err := client.DialAndSendWithContext(ctx, message); err != nil {
 		return err
 	}
 

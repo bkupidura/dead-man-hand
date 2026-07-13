@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -14,17 +13,20 @@ import (
 	"dmh/internal/crypt"
 	"dmh/internal/vault"
 
+	"github.com/google/renameio/v2"
 	"github.com/google/uuid"
 )
 
 var (
 	// mocks for tests
-	cryptNew   = crypt.New
-	osOpenFile = func(name string) (io.WriteCloser, error) {
-		return os.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+	cryptNew    = crypt.New
+	atomicWrite = func(path string, data []byte, perm os.FileMode) error {
+		return renameio.WriteFile(path, data, perm)
 	}
 	osChmod     = os.Chmod
 	jsonMarshal = json.Marshal
+	// httpClient is used for the outbound http connections.
+	httpClient = &http.Client{Timeout: 30 * time.Second}
 )
 
 // Action stores user actions.
@@ -213,7 +215,7 @@ func (s *State) AddAction(a *Action) error {
 		return err
 	}
 
-	resp, err := http.Post(encrypted.EncryptionMeta.VaultURL, "application/json", bytes.NewBuffer(vaultSecretJson))
+	resp, err := httpClient.Post(encrypted.EncryptionMeta.VaultURL, "application/json", bytes.NewBuffer(vaultSecretJson))
 	if err != nil {
 		return err
 	}
@@ -272,8 +274,7 @@ func (s *State) MarkActionAsProcessed(u string) error {
 		return err
 	}
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -298,7 +299,7 @@ func (s *State) DecryptAction(u string) (*Action, error) {
 		return nil, fmt.Errorf("missing action with uuid %s", u)
 	}
 
-	resp, err := http.Get(encryptedAction.EncryptionMeta.VaultURL)
+	resp, err := httpClient.Get(encryptedAction.EncryptionMeta.VaultURL)
 	if err != nil {
 		return nil, err
 	}
@@ -336,14 +337,11 @@ func (s *State) DecryptAction(u string) (*Action, error) {
 // save dumps state to disk.
 // save will panic when this is not possible.
 func (s *State) save() {
-	f, err := osOpenFile(s.savePath)
-	if err != nil {
-		log.Panicf("unable to dump state: %s", err)
-	}
-	defer f.Close()
-
-	err = json.NewEncoder(f).Encode(s.data)
+	data, err := jsonMarshal(s.data)
 	if err != nil {
 		log.Panicf("unable to encode state: %s", err)
+	}
+	if err := atomicWrite(s.savePath, data, 0600); err != nil {
+		log.Panicf("unable to dump state: %s", err)
 	}
 }

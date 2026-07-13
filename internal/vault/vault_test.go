@@ -1,8 +1,8 @@
 package vault
 
 import (
+	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"testing"
 	"time"
@@ -30,30 +30,6 @@ func (m *mockCrypt) Decrypt(data string) (string, error) {
 func (m *mockCrypt) GetPrivateKey() string {
 	args := m.Called()
 	return args.String(0)
-}
-
-type failWriter struct {
-	mock.Mock
-}
-
-func (f *failWriter) Write(p []byte) (n int, err error) {
-	args := f.Called(p)
-	return args.Int(0), args.Error(1)
-}
-func (f *failWriter) Close() error {
-	args := f.Called()
-	return args.Error(0)
-}
-
-type failFile struct {
-	*failWriter
-}
-
-func (f *failFile) Write(p []byte) (n int, err error) {
-	return f.failWriter.Write(p)
-}
-func (f *failFile) Close() error {
-	return f.failWriter.Close()
 }
 
 func TestNew(t *testing.T) {
@@ -988,11 +964,19 @@ func TestDeleteSecret(t *testing.T) {
 
 func TestSave(t *testing.T) {
 	tests := []struct {
-		inputData      func() map[string]*VaultData
-		expectedData   string
-		mockOsOpenFile func(string) (io.WriteCloser, error)
-		shouldPanic    bool
+		inputData       func() map[string]*VaultData
+		expectedData    string
+		mockAtomicWrite func(string, []byte, os.FileMode) error
+		mockJsonMarshal func(any) ([]byte, error)
+		shouldPanic     bool
 	}{
+		{
+			inputData: func() map[string]*VaultData {
+				return map[string]*VaultData{"fail": {Secrets: map[string]*Secret{}}}
+			},
+			mockJsonMarshal: func(any) ([]byte, error) { return nil, fmt.Errorf("mockJsonMarshal error") },
+			shouldPanic:     true,
+		},
 		{
 			inputData: func() map[string]*VaultData {
 				mockTime, err := time.Parse("2006-01-02T15:04:05.999999-07:00", "2025-03-26T14:55:40.119447+01:00")
@@ -1016,8 +1000,8 @@ func TestSave(t *testing.T) {
 				}
 				return d
 			},
-			mockOsOpenFile: func(string) (io.WriteCloser, error) { return nil, fmt.Errorf("mockOsOpenFile error") },
-			shouldPanic:    true,
+			mockAtomicWrite: func(string, []byte, os.FileMode) error { return fmt.Errorf("mockAtomicWrite error") },
+			shouldPanic:     true,
 		},
 		{
 			inputData: func() map[string]*VaultData {
@@ -1052,29 +1036,32 @@ func TestSave(t *testing.T) {
 				}
 				return d
 			},
-			expectedData: `{"testClientUUID":{"last_seen":"2025-03-26T14:55:40.119447+01:00","secrets":{"testSecret1":{"key":"encrypted","process_after":10,"encryption":{"kind":"X25519"}},"testSecret2":{"key":"encrypted2","process_after":10,"encryption":{"kind":"X25519"}}}},"testClientUUID2":{"last_seen":"2025-03-26T14:55:40.119447+01:00","secrets":{"testSecret3":{"key":"encrypted3","process_after":10,"encryption":{"kind":"X25519"}}}}}` + "\n",
+			expectedData: `{"testClientUUID":{"last_seen":"2025-03-26T14:55:40.119447+01:00","secrets":{"testSecret1":{"key":"encrypted","process_after":10,"encryption":{"kind":"X25519"}},"testSecret2":{"key":"encrypted2","process_after":10,"encryption":{"kind":"X25519"}}}},"testClientUUID2":{"last_seen":"2025-03-26T14:55:40.119447+01:00","secrets":{"testSecret3":{"key":"encrypted3","process_after":10,"encryption":{"kind":"X25519"}}}}}`,
 		},
 		{
 			inputData: func() map[string]*VaultData {
 				return map[string]*VaultData{"fail": {Secrets: map[string]*Secret{}}}
 			},
-			mockOsOpenFile: func(string) (io.WriteCloser, error) {
-				fw := &failWriter{}
-				fw.On("Write", mock.Anything).Return(0, fmt.Errorf("failWriter error"))
-				fw.On("Close").Return(nil)
-				return &failFile{fw}, nil
+			mockAtomicWrite: func(string, []byte, os.FileMode) error {
+				return fmt.Errorf("mockAtomicWrite write error")
 			},
 			shouldPanic: true,
 		},
 	}
-	oldOsOpenFile := osOpenFile
+	oldAtomicWrite := atomicWrite
+	defer func() {
+		atomicWrite = oldAtomicWrite
+		jsonMarshal = json.Marshal
+	}()
 	for _, test := range tests {
-		osOpenFile = oldOsOpenFile
-		defer func() {
-			osOpenFile = oldOsOpenFile
-		}()
-		if test.mockOsOpenFile != nil {
-			osOpenFile = test.mockOsOpenFile
+		atomicWrite = oldAtomicWrite
+		if test.mockAtomicWrite != nil {
+			atomicWrite = test.mockAtomicWrite
+		}
+
+		jsonMarshal = json.Marshal
+		if test.mockJsonMarshal != nil {
+			jsonMarshal = test.mockJsonMarshal
 		}
 
 		os.Remove("test_vault.json")
@@ -1096,22 +1083,19 @@ func TestSave(t *testing.T) {
 	}
 }
 
-func TestOsOpenFileUsesRestrictivePermissions(t *testing.T) {
+func TestAtomicWriteUsesRestrictivePermissions(t *testing.T) {
 	path := "test_perms_vault.json"
 	os.Remove(path)
 	defer os.Remove(path)
 
-	f, err := osOpenFile(path)
-	require.NoError(t, err)
-	require.NoError(t, f.Close())
+	require.NoError(t, atomicWrite(path, []byte("{}"), 0600))
 
 	info, err := os.Stat(path)
 	require.NoError(t, err)
 	require.Equal(t, os.FileMode(0600), info.Mode().Perm())
 
 	// Open failure (missing directory) must surface as an error.
-	_, err = osOpenFile("nonexistent-dir/vault.json")
-	require.Error(t, err)
+	require.Error(t, atomicWrite("nonexistent-dir/vault.json", []byte("{}"), 0600))
 }
 
 func TestNewTightensExistingFilePermissions(t *testing.T) {
