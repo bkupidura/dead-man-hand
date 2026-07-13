@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sync"
 	"time"
 
 	"dmh/internal/crypt"
@@ -43,6 +44,7 @@ type VaultData struct {
 
 // Vault internal data.
 type Vault struct {
+	mtx               sync.RWMutex
 	data              map[string]*VaultData // stores vault data string index is client-uuid
 	key               string                // Vault uses this key to encrypt all secrets before storing them on disk
 	savePath          string                // Vault will dump and loads its state from this file
@@ -90,6 +92,9 @@ func New(opts *Options) (VaultInterface, error) {
 
 // UpdateLastSeen updates when clientUUID was last seen by vault.
 func (v *Vault) UpdateLastSeen(clientUUID string) {
+	v.mtx.Lock()
+	defer v.mtx.Unlock()
+
 	v.ensureClientUUID(clientUUID)
 	v.data[clientUUID].LastSeen = time.Now()
 	v.save()
@@ -99,12 +104,18 @@ func (v *Vault) UpdateLastSeen(clientUUID string) {
 // Secret is considered released when clientUUID was not seen Secret.LastSeen number of hours.
 // Secret will be decrypted before returning to client.
 func (v *Vault) GetSecret(clientUUID string, secretUUID string) (*Secret, error) {
-	v.ensureClientUUID(clientUUID)
+	v.mtx.RLock()
+	defer v.mtx.RUnlock()
 
-	lastSeen := v.data[clientUUID].LastSeen
+	clientData, ok := v.data[clientUUID]
+	if !ok {
+		return nil, fmt.Errorf("secret %s/%s is missing", clientUUID, secretUUID)
+	}
+
+	lastSeen := clientData.LastSeen
 
 	now := time.Now()
-	secret, ok := v.data[clientUUID].Secrets[secretUUID]
+	secret, ok := clientData.Secrets[secretUUID]
 	if !ok {
 		return nil, fmt.Errorf("secret %s/%s is missing", clientUUID, secretUUID)
 	}
@@ -136,6 +147,9 @@ func (v *Vault) GetSecret(clientUUID string, secretUUID string) (*Secret, error)
 // If secret for clientUUID+secretUUID already exists it will NOT be overridden.
 // Secrets will be encrypted with Vault.key before storing.
 func (v *Vault) AddSecret(clientUUID string, secretUUID string, secret *Secret) error {
+	v.mtx.Lock()
+	defer v.mtx.Unlock()
+
 	v.ensureClientUUID(clientUUID)
 
 	_, ok := v.data[clientUUID].Secrets[secretUUID]
@@ -170,13 +184,19 @@ func (v *Vault) AddSecret(clientUUID string, secretUUID string, secret *Secret) 
 // Secret can be deleted only after releasing.
 // Secret is considered released when clientUUID was not seen Secret.LastSeen number of hours.
 func (v *Vault) DeleteSecret(clientUUID string, secretUUID string) error {
-	v.ensureClientUUID(clientUUID)
+	v.mtx.Lock()
+	defer v.mtx.Unlock()
 
-	lastSeen := v.data[clientUUID].LastSeen
+	clientData, ok := v.data[clientUUID]
+	if !ok {
+		return fmt.Errorf("secret %s/%s is missing", clientUUID, secretUUID)
+	}
+
+	lastSeen := clientData.LastSeen
 
 	now := time.Now()
 
-	secret, ok := v.data[clientUUID].Secrets[secretUUID]
+	secret, ok := clientData.Secrets[secretUUID]
 	if !ok {
 		return fmt.Errorf("secret %s/%s is missing", clientUUID, secretUUID)
 	}
@@ -185,12 +205,13 @@ func (v *Vault) DeleteSecret(clientUUID string, secretUUID string) error {
 		return fmt.Errorf("secret %s/%s is not released yet", clientUUID, secretUUID)
 	}
 
-	delete(v.data[clientUUID].Secrets, secretUUID)
+	delete(clientData.Secrets, secretUUID)
 	v.save()
 	return nil
 }
 
 // ensureClientUUID ensures proper data structs for clientUUID.
+// Caller must hold Vault write lock.
 func (v *Vault) ensureClientUUID(clientUUID string) {
 	_, ok := v.data[clientUUID]
 	if !ok {
@@ -203,6 +224,7 @@ func (v *Vault) ensureClientUUID(clientUUID string) {
 
 // save dumps vault to disk.
 // save will panic when this is not possible.
+// Caller must hold Vault lock.
 func (v *Vault) save() {
 	data, err := jsonMarshal(v.data)
 	if err != nil {

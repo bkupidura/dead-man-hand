@@ -950,6 +950,18 @@ func TestDeleteSecret(t *testing.T) {
 			inputSecretUUID: "testSecretUUID",
 			expectedSecrets: map[string]*Secret{},
 		},
+		{
+			inputVault: func() *Vault {
+				return &Vault{
+					savePath:          "test_vault.json",
+					data:              map[string]*VaultData{},
+					secretProcessUnit: time.Hour,
+				}
+			},
+			inputClientUUID: "unknownClientUUID",
+			inputSecretUUID: "testSecretUUID",
+			expectedError:   fmt.Errorf("secret unknownClientUUID/testSecretUUID is missing"),
+		},
 	}
 	vaultFile := "test_vault.json"
 	os.Remove(vaultFile)
@@ -958,7 +970,11 @@ func TestDeleteSecret(t *testing.T) {
 		v := test.inputVault()
 		err := v.DeleteSecret(test.inputClientUUID, test.inputSecretUUID)
 		require.Equal(t, test.expectedError, err)
-		require.Equal(t, test.expectedSecrets, v.data[test.inputClientUUID].Secrets)
+		if test.expectedSecrets == nil {
+			require.NotContains(t, v.data, test.inputClientUUID)
+		} else {
+			require.Equal(t, test.expectedSecrets, v.data[test.inputClientUUID].Secrets)
+		}
 	}
 }
 

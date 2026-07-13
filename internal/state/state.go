@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sync"
 	"time"
 
 	"dmh/internal/crypt"
@@ -97,6 +98,7 @@ type StateInterface interface {
 
 // State stores internal state.
 type State struct {
+	mtx             sync.RWMutex
 	data            *data
 	vaultURL        string
 	vaultClientUUID string
@@ -137,18 +139,27 @@ func New(opts *Options) (StateInterface, error) {
 
 // UpdateLastSeen updates when user was last seen.
 func (s *State) UpdateLastSeen() {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
 	s.data.LastSeen = time.Now()
 	s.save()
 }
 
 // GetLastSeen returns when user was last seen.
 func (s *State) GetLastSeen() time.Time {
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+
 	return s.data.LastSeen
 }
 
 // UpdateActionLastRun updates LastRun for action.
 func (s *State) UpdateActionLastRun(u string) error {
-	a, _ := s.GetAction(u)
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	a, _ := s.getAction(u)
 	if a == nil {
 		return fmt.Errorf("missing action with uuid %s", u)
 	}
@@ -159,7 +170,10 @@ func (s *State) UpdateActionLastRun(u string) error {
 
 // GetActionLastRun returns action LastRun.
 func (s *State) GetActionLastRun(u string) (time.Time, error) {
-	a, _ := s.GetAction(u)
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+
+	a, _ := s.getAction(u)
 	if a == nil {
 		return time.Time{}, fmt.Errorf("missing action with uuid %s", u)
 	}
@@ -224,18 +238,31 @@ func (s *State) AddAction(a *Action) error {
 		return fmt.Errorf("unable to publish vault data, status code %d", resp.StatusCode)
 	}
 
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
 	s.data.Actions = append(s.data.Actions, encrypted)
 	s.save()
 	return nil
 }
 
-// GetActions returns all EncryptedActions.
+// GetActions returns copies of all EncryptedActions.
+// Copies are returned so callers can read them without holding State lock.
 func (s *State) GetActions() []*EncryptedAction {
-	return s.data.Actions
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+
+	actions := make([]*EncryptedAction, 0, len(s.data.Actions))
+	for _, a := range s.data.Actions {
+		actionCopy := *a
+		actions = append(actions, &actionCopy)
+	}
+	return actions
 }
 
-// GetAction returns single EncryptedAction based on uuid.
-func (s *State) GetAction(u string) (*EncryptedAction, int) {
+// getAction returns single EncryptedAction based on uuid.
+// Caller must hold State lock.
+func (s *State) getAction(u string) (*EncryptedAction, int) {
 	for i, a := range s.data.Actions {
 		if a.UUID == u {
 			return a, i
@@ -244,9 +271,26 @@ func (s *State) GetAction(u string) (*EncryptedAction, int) {
 	return nil, -1
 }
 
+// GetAction returns copy of single EncryptedAction based on uuid.
+// Copy is returned so callers can read it without holding State lock.
+func (s *State) GetAction(u string) (*EncryptedAction, int) {
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+
+	a, i := s.getAction(u)
+	if a == nil {
+		return nil, i
+	}
+	actionCopy := *a
+	return &actionCopy, i
+}
+
 // DeleteAction deletes actions from State.
 func (s *State) DeleteAction(u string) error {
-	a, i := s.GetAction(u)
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	a, i := s.getAction(u)
 	if a == nil {
 		return fmt.Errorf("missing action with uuid %s", u)
 	}
@@ -261,13 +305,10 @@ func (s *State) DeleteAction(u string) error {
 // 1 - action was executed
 // 2 - action was executed and private key was deleted from vault.
 func (s *State) MarkActionAsProcessed(u string) error {
-	a, i := s.GetAction(u)
-	if a == nil {
-		return fmt.Errorf("missing action with uuid %s", u)
+	a, err := s.setActionProcessed(u, 1)
+	if err != nil {
+		return err
 	}
-
-	s.data.Actions[i].Processed = 1
-	s.save()
 
 	req, err := http.NewRequest(http.MethodDelete, a.EncryptionMeta.VaultURL, nil)
 	if err != nil {
@@ -285,10 +326,27 @@ func (s *State) MarkActionAsProcessed(u string) error {
 		return fmt.Errorf("unable to delete vault data, status code %d", resp.StatusCode)
 	}
 
-	s.data.Actions[i].Processed = 2
-	s.save()
+	if _, err := s.setActionProcessed(u, 2); err != nil {
+		return err
+	}
 
 	return nil
+}
+
+// setActionProcessed sets Processed for action and dumps state to disk.
+// It returns a copy of the updated action so callers can read it without holding State lock.
+func (s *State) setActionProcessed(u string, processed int) (*EncryptedAction, error) {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	a, _ := s.getAction(u)
+	if a == nil {
+		return nil, fmt.Errorf("missing action with uuid %s", u)
+	}
+	a.Processed = processed
+	s.save()
+	actionCopy := *a
+	return &actionCopy, nil
 }
 
 // DecryptAction decrypts EncryptedAction.
@@ -336,6 +394,7 @@ func (s *State) DecryptAction(u string) (*Action, error) {
 
 // save dumps state to disk.
 // save will panic when this is not possible.
+// Caller must hold State lock.
 func (s *State) save() {
 	data, err := jsonMarshal(s.data)
 	if err != nil {
