@@ -919,11 +919,12 @@ func TestDeleteAction(t *testing.T) {
 
 func TestMarkActionAsProcessed(t *testing.T) {
 	tests := []struct {
-		inputState      func() StateInterface
-		inputUUID       string
-		expectedActions []*EncryptedAction
-		expectedError   bool
-		fakeHTTPServer  func() *httptest.Server
+		inputState          func() StateInterface
+		inputUUID           string
+		expectedActions     []*EncryptedAction
+		expectedError       bool
+		fakeHTTPServer      func() *httptest.Server
+		fakeHTTPServerState func(StateInterface) *httptest.Server
 	}{
 		{
 			inputState: func() StateInterface {
@@ -1352,6 +1353,36 @@ func TestMarkActionAsProcessed(t *testing.T) {
 				return s
 			},
 		},
+		{
+			inputState: func() StateInterface {
+				s, err := New(&Options{SavePath: "test_state.json", VaultClientUUID: "client-random-uuid"})
+				require.Nil(t, err)
+				s.(*State).data.Actions = []*EncryptedAction{
+					{
+						Action: Action{
+							Kind:         "mail",
+							ProcessAfter: 20,
+							Comment:      "test",
+							Data:         "encrypted",
+						},
+						UUID:           "test",
+						Processed:      0,
+						EncryptionMeta: EncryptionMeta{},
+					},
+				}
+				return s
+			},
+			inputUUID:       "test",
+			expectedActions: []*EncryptedAction{},
+			fakeHTTPServerState: func(s StateInterface) *httptest.Server {
+				srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					require.Nil(t, s.DeleteAction("test"))
+					w.WriteHeader(http.StatusOK)
+				}))
+				return srv
+			},
+			expectedError: true,
+		},
 	}
 	for _, test := range tests {
 		os.Remove("test_state.json")
@@ -1359,8 +1390,12 @@ func TestMarkActionAsProcessed(t *testing.T) {
 		s := test.inputState()
 
 		var fakeServer *httptest.Server
-		if test.fakeHTTPServer != nil {
-			fakeServer = test.fakeHTTPServer()
+		if test.fakeHTTPServer != nil || test.fakeHTTPServerState != nil {
+			if test.fakeHTTPServer != nil {
+				fakeServer = test.fakeHTTPServer()
+			} else {
+				fakeServer = test.fakeHTTPServerState(s)
+			}
 			defer fakeServer.Close()
 			s.(*State).vaultURL = fakeServer.URL
 			for _, a := range s.(*State).data.Actions {
