@@ -35,30 +35,6 @@ func (m *mockCrypt) GetPrivateKey() string {
 	return args.String(0)
 }
 
-type failWriter struct {
-	mock.Mock
-}
-
-func (f *failWriter) Write(p []byte) (n int, err error) {
-	args := f.Called(p)
-	return args.Int(0), args.Error(1)
-}
-func (f *failWriter) Close() error {
-	args := f.Called()
-	return args.Error(0)
-}
-
-type failFile struct {
-	*failWriter
-}
-
-func (f *failFile) Write(p []byte) (n int, err error) {
-	return f.failWriter.Write(p)
-}
-func (f *failFile) Close() error {
-	return f.failWriter.Close()
-}
-
 func TestActionValidate(t *testing.T) {
 	tests := []struct {
 		inputAction   *Action
@@ -1754,10 +1730,11 @@ func TestDecryptAction(t *testing.T) {
 
 func TestSave(t *testing.T) {
 	tests := []struct {
-		inputActions   []*EncryptedAction
-		expectedData   string
-		mockOsOpenFile func(string) (io.WriteCloser, error)
-		shouldPanic    bool
+		inputActions    []*EncryptedAction
+		expectedData    string
+		mockAtomicWrite func(string, []byte, os.FileMode) error
+		mockJsonMarshal func(any) ([]byte, error)
+		shouldPanic     bool
 	}{
 		{
 			inputActions: []*EncryptedAction{
@@ -1772,16 +1749,18 @@ func TestSave(t *testing.T) {
 					Processed: 1,
 				},
 			},
-			mockOsOpenFile: func(string) (io.WriteCloser, error) { return nil, fmt.Errorf("mockOsOpenFile error") },
-			shouldPanic:    true,
+			mockAtomicWrite: func(string, []byte, os.FileMode) error { return fmt.Errorf("mockAtomicWrite error") },
+			shouldPanic:     true,
+		},
+		{
+			inputActions:    []*EncryptedAction{},
+			mockJsonMarshal: func(any) ([]byte, error) { return nil, fmt.Errorf("mockJsonMarshal error") },
+			shouldPanic:     true,
 		},
 		{
 			inputActions: []*EncryptedAction{},
-			mockOsOpenFile: func(string) (io.WriteCloser, error) {
-				fw := &failWriter{}
-				fw.On("Write", mock.Anything).Return(0, fmt.Errorf("failWriter error"))
-				fw.On("Close").Return(nil)
-				return &failFile{fw}, nil
+			mockAtomicWrite: func(string, []byte, os.FileMode) error {
+				return fmt.Errorf("mockAtomicWrite write error")
 			},
 			shouldPanic: true,
 		},
@@ -1808,17 +1787,23 @@ func TestSave(t *testing.T) {
 					Processed: 0,
 				},
 			},
-			expectedData: `{"last_seen":"2025-03-26T14:55:40.119447+01:00","actions":[{"kind":"mail","process_after":20,"min_interval":0,"comment":"test","data":"encrypted","uuid":"test","processed":1,"last_run":"0001-01-01T00:00:00Z","encryption":{"kind":"","vault_url":""}},{"kind":"mail","process_after":20,"min_interval":0,"comment":"test","data":"encrypted2","uuid":"test2","processed":0,"last_run":"0001-01-01T00:00:00Z","encryption":{"kind":"","vault_url":""}}]}` + "\n",
+			expectedData: `{"last_seen":"2025-03-26T14:55:40.119447+01:00","actions":[{"kind":"mail","process_after":20,"min_interval":0,"comment":"test","data":"encrypted","uuid":"test","processed":1,"last_run":"0001-01-01T00:00:00Z","encryption":{"kind":"","vault_url":""}},{"kind":"mail","process_after":20,"min_interval":0,"comment":"test","data":"encrypted2","uuid":"test2","processed":0,"last_run":"0001-01-01T00:00:00Z","encryption":{"kind":"","vault_url":""}}]}`,
 		},
 	}
-	oldOsOpenFile := osOpenFile
+	oldAtomicWrite := atomicWrite
+	defer func() {
+		atomicWrite = oldAtomicWrite
+		jsonMarshal = json.Marshal
+	}()
 	for _, test := range tests {
-		osOpenFile = oldOsOpenFile
-		defer func() {
-			osOpenFile = oldOsOpenFile
-		}()
-		if test.mockOsOpenFile != nil {
-			osOpenFile = test.mockOsOpenFile
+		atomicWrite = oldAtomicWrite
+		if test.mockAtomicWrite != nil {
+			atomicWrite = test.mockAtomicWrite
+		}
+
+		jsonMarshal = json.Marshal
+		if test.mockJsonMarshal != nil {
+			jsonMarshal = test.mockJsonMarshal
 		}
 
 		os.Remove("test_state.json")
@@ -1846,22 +1831,19 @@ func TestSave(t *testing.T) {
 	}
 }
 
-func TestOsOpenFileUsesRestrictivePermissions(t *testing.T) {
+func TestAtomicWriteUsesRestrictivePermissions(t *testing.T) {
 	path := "test_perms_state.json"
 	os.Remove(path)
 	defer os.Remove(path)
 
-	f, err := osOpenFile(path)
-	require.NoError(t, err)
-	require.NoError(t, f.Close())
+	require.NoError(t, atomicWrite(path, []byte("{}"), 0600))
 
 	info, err := os.Stat(path)
 	require.NoError(t, err)
 	require.Equal(t, os.FileMode(0600), info.Mode().Perm())
 
 	// Open failure (missing directory) must surface as an error.
-	_, err = osOpenFile("nonexistent-dir/state.json")
-	require.Error(t, err)
+	require.Error(t, atomicWrite("nonexistent-dir/state.json", []byte("{}"), 0600))
 }
 
 func TestNewTightensExistingFilePermissions(t *testing.T) {

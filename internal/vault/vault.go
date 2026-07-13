@@ -3,21 +3,23 @@ package vault
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"time"
 
 	"dmh/internal/crypt"
+
+	"github.com/google/renameio/v2"
 )
 
 var (
 	// mocks for tests
-	osOpenFile = func(name string) (io.WriteCloser, error) {
-		return os.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+	atomicWrite = func(path string, data []byte, perm os.FileMode) error {
+		return renameio.WriteFile(path, data, perm)
 	}
-	osChmod  = os.Chmod
-	cryptNew = crypt.New
+	osChmod     = os.Chmod
+	cryptNew    = crypt.New
+	jsonMarshal = json.Marshal
 )
 
 // EncryptionMeta stores information about encryption.
@@ -199,16 +201,14 @@ func (v *Vault) ensureClientUUID(clientUUID string) {
 	}
 }
 
-// save dumps Vault content to disk on every change.
+// save dumps vault to disk.
+// save will panic when this is not possible.
 func (v *Vault) save() {
-	f, err := osOpenFile(v.savePath)
-	if err != nil {
-		log.Panicf("unable to dump state: %s", err)
-	}
-	defer f.Close()
-
-	err = json.NewEncoder(f).Encode(v.data)
+	data, err := jsonMarshal(v.data)
 	if err != nil {
 		log.Panicf("unable to encode state: %s", err)
+	}
+	if err := atomicWrite(v.savePath, data, 0600); err != nil {
+		log.Panicf("unable to dump state: %s", err)
 	}
 }
