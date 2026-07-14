@@ -23,7 +23,7 @@ require (
 
 require (
 	filippo.io/hpke v0.4.0 // indirect
-	github.com/ajg/form v1.7.2 // indirect
+	github.com/ajg/form v1.7.3 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect

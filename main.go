@@ -47,6 +47,12 @@ func main() {
 		actionProcessUnit = time.Hour
 	}
 
+	for _, component := range enabledComponents {
+		if !slices.Contains([]string{"dmh", "vault"}, component) {
+			log.Printf("unknown component %s enabled, it will be IGNORED! Supported components: dmh, vault", component)
+		}
+	}
+
 	if slices.Contains(enabledComponents, "dmh") && slices.Contains(enabledComponents, "vault") {
 		log.Printf("dmh and vault component enabled. THIS IS NOT RECOMMENDED FOR SECURITY REASONS!")
 	}

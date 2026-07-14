@@ -39,7 +39,7 @@ func TestBulkSMSRun(t *testing.T) {
 			expectedError: true,
 		},
 		{
-			inputPlugin:   &ExecuteBulkSMS{Message: "test", Destination: []string{"1234", "567"}, config: BulkSMSConfig{RoutingGroup: "standard", Token: BulkSMSToken{ID: "token2", Secret: "secret2"}}},
+			inputPlugin:   &ExecuteBulkSMS{Message: "test", Destination: []string{"1234", "567"}, config: BulkSMSConfig{RoutingGroup: "STANDARD", Token: BulkSMSToken{ID: "token2", Secret: "secret2"}}},
 			inputEndpoint: func(url string) string { return url },
 			fakeHTTPServer: func() *httptest.Server {
 				s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -56,7 +56,7 @@ func TestBulkSMSRun(t *testing.T) {
 			expectedError: true,
 		},
 		{
-			inputPlugin:   &ExecuteBulkSMS{Message: "test", Destination: []string{"1234", "567"}, config: BulkSMSConfig{RoutingGroup: "standard", Token: BulkSMSToken{ID: "token", Secret: "secret"}}},
+			inputPlugin:   &ExecuteBulkSMS{Message: "test", Destination: []string{"1234", "567"}, config: BulkSMSConfig{RoutingGroup: "STANDARD", Token: BulkSMSToken{ID: "token", Secret: "secret"}}},
 			inputEndpoint: func(url string) string { return url },
 			fakeHTTPServer: func() *httptest.Server {
 				s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -186,7 +186,7 @@ func TestBulkSMSPopulateConfig(t *testing.T) {
 			expectedError: fmt.Errorf("routing_group must be one of economy, standard or premium"),
 			expectedConfig: BulkSMSConfig{
 				Token:        BulkSMSToken{ID: "id", Secret: "secret"},
-				RoutingGroup: "test",
+				RoutingGroup: "TEST",
 			},
 		},
 		{
@@ -197,7 +197,7 @@ func TestBulkSMSPopulateConfig(t *testing.T) {
 			},
 			expectedConfig: BulkSMSConfig{
 				Token:        BulkSMSToken{ID: "id", Secret: "secret"},
-				RoutingGroup: "standard",
+				RoutingGroup: "STANDARD",
 			},
 		},
 		{
@@ -209,7 +209,19 @@ func TestBulkSMSPopulateConfig(t *testing.T) {
 			},
 			expectedConfig: BulkSMSConfig{
 				Token:        BulkSMSToken{ID: "id", Secret: "secret"},
-				RoutingGroup: "premium",
+				RoutingGroup: "PREMIUM",
+			},
+		},
+		{
+			inputExecute: &Execute{
+				bulkSMSConf: BulkSMSConfig{
+					Token:        BulkSMSToken{ID: "id", Secret: "secret"},
+					RoutingGroup: "Premium",
+				},
+			},
+			expectedConfig: BulkSMSConfig{
+				Token:        BulkSMSToken{ID: "id", Secret: "secret"},
+				RoutingGroup: "PREMIUM",
 			},
 		},
 	}

@@ -82,19 +82,31 @@ func readConfig(configFile string) *koanf.Koanf {
 }
 
 // getBulkSMSConfig returns parsed config for bulksms execute plugin.
+// When the config section is present, it is validated at startup.
 func getBulkSMSConfig(k *koanf.Koanf) execute.BulkSMSConfig {
 	var config execute.BulkSMSConfig
 	if err := k.Unmarshal("execute.plugin.bulksms", &config); err != nil {
 		log.Panicf("unable to unmarshal config: %s", err)
 	}
+	if k.Exists("execute.plugin.bulksms") {
+		if err := config.Validate(); err != nil {
+			log.Panicf("invalid execute.plugin.bulksms config: %s", err)
+		}
+	}
 	return config
 }
 
 // getMailConfig returns parsed config for mail execute plugin.
+// When the config section is present, it is validated at startup.
 func getMailConfig(k *koanf.Koanf) execute.MailConfig {
 	var config execute.MailConfig
 	if err := k.Unmarshal("execute.plugin.mail", &config); err != nil {
 		log.Panicf("unable to unmarshal config: %s", err)
+	}
+	if k.Exists("execute.plugin.mail") {
+		if err := config.Validate(); err != nil {
+			log.Panicf("invalid execute.plugin.mail config: %s", err)
+		}
 	}
 	return config
 }

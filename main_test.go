@@ -290,7 +290,7 @@ func TestComponentsErrors(t *testing.T) {
 	require.Nil(t, err)
 	defer f.Close()
 	_, err = f.WriteString(`
-               components: ['dmh', 'vault']
+               components: ['dmh', 'vault', 'unknown']
                state:
                  file: test.yaml
                remote_vault:
@@ -662,6 +662,7 @@ func TestDispatcher(t *testing.T) {
 		go dispatcher(s, e, m, time.Second, chStop)
 		time.Sleep(time.Duration(3) * getActionsIntervalUnit)
 		chStop <- true
+		m.Stop()
 		if test.expectedActions != nil {
 			require.Equal(t, test.expectedActions(), s.GetActions())
 		}
