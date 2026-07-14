@@ -46,7 +46,7 @@ func (d *ExecuteBulkSMS) Run() error {
 	sr := &sendRequest{
 		Body:         d.Message,
 		Encoding:     "UNICODE",
-		RoutingGroup: strings.ToUpper(d.config.RoutingGroup),
+		RoutingGroup: d.config.RoutingGroup,
 		To:           d.Destination,
 	}
 	marshaledData, err := jsonMarshal(sr)
@@ -96,18 +96,25 @@ func (d *ExecuteBulkSMS) Populate(a *state.Action) error {
 	return nil
 }
 
-func (d *ExecuteBulkSMS) PopulateConfig(e *Execute) error {
-	d.config = e.bulkSMSConf
-	if d.config.Token.ID == "" || d.config.Token.Secret == "" {
+// Validate normalizes and checks BulkSMSConfig.
+func (c *BulkSMSConfig) Validate() error {
+	if c.Token.ID == "" || c.Token.Secret == "" {
 		return fmt.Errorf("config token id and secret must be provided")
 	}
 
-	if d.config.RoutingGroup == "" {
-		d.config.RoutingGroup = "standard"
+	if c.RoutingGroup == "" {
+		c.RoutingGroup = "standard"
 	}
+	// Uppercase is expected by BulkSMS API.
+	c.RoutingGroup = strings.ToUpper(c.RoutingGroup)
 
-	if !slices.Contains([]string{"economy", "standard", "premium"}, d.config.RoutingGroup) {
+	if !slices.Contains([]string{"ECONOMY", "STANDARD", "PREMIUM"}, c.RoutingGroup) {
 		return fmt.Errorf("routing_group must be one of economy, standard or premium")
 	}
 	return nil
+}
+
+func (d *ExecuteBulkSMS) PopulateConfig(e *Execute) error {
+	d.config = e.bulkSMSConf
+	return d.config.Validate()
 }

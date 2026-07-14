@@ -65,6 +65,12 @@ func Initialize(opts *Options) *PromCollector {
 	return p
 }
 
+// Stop terminates collector goroutines.
+func (p *PromCollector) Stop() {
+	p.chStop <- true
+	p.chSlowStop <- true
+}
+
 // UpdateDMHActionErrors increments the dmh_action_errors_total counter for a given action uuid and error label by n.
 func (p *PromCollector) UpdateDMHActionErrors(actionUUID, errorLabel string, n int) {
 	p.dmhActionErrorsTotal.WithLabelValues(actionUUID, errorLabel).Add(float64(n))

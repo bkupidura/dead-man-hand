@@ -385,6 +385,7 @@ func TestDMHActionErrorsTotal(t *testing.T) {
 	for _, test := range tests {
 		opts := &Options{State: nil, Registry: prometheus.NewRegistry()}
 		p := Initialize(opts)
+		p.Stop()
 
 		for _, inc := range test.inputIncrements {
 			p.UpdateDMHActionErrors(test.inputActionUUID, test.inputErrorLabel, inc)

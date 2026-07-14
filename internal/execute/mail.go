@@ -109,25 +109,30 @@ func (d *ExecuteMail) Populate(a *state.Action) error {
 	return nil
 }
 
-func (d *ExecuteMail) PopulateConfig(e *Execute) error {
-	d.config = e.mailConf
-	if (d.config.Username == "" && d.config.Password != "") || (d.config.Username != "" && d.config.Password == "") {
+// Validate normalizes and checks MailConfig.
+func (c *MailConfig) Validate() error {
+	if (c.Username == "" && c.Password != "") || (c.Username != "" && c.Password == "") {
 		return fmt.Errorf("username and password must be set together")
 	}
-	if d.config.Server == "" {
+	if c.Server == "" {
 		return fmt.Errorf("server must be provided")
 	}
-	if _, err := mail.ParseAddress(d.config.From); err != nil {
+	if _, err := mail.ParseAddress(c.From); err != nil {
 		return fmt.Errorf("from must be a valid address %s", err)
 	}
 
-	if d.config.TLSPolicy == "" {
-		d.config.TLSPolicy = "tls_mandatory"
+	if c.TLSPolicy == "" {
+		c.TLSPolicy = "tls_mandatory"
 	}
 
-	if !slices.Contains([]string{"tls_mandatory", "tls_opportunistic", "no_tls"}, d.config.TLSPolicy) {
+	if !slices.Contains([]string{"tls_mandatory", "tls_opportunistic", "no_tls"}, c.TLSPolicy) {
 		return fmt.Errorf("tls_policy must be tls_mandatory, tls_opportunistic or no_tls")
 	}
 
 	return nil
+}
+
+func (d *ExecuteMail) PopulateConfig(e *Execute) error {
+	d.config = e.mailConf
+	return d.config.Validate()
 }

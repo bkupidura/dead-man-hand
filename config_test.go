@@ -197,6 +197,41 @@ func TestReadConfig(t *testing.T) {
 			},
 		},
 		{
+			// Unknown component must not panic, only warn.
+			configFunc: func(configFile string) {
+				f, err := os.Create(configFile)
+				require.Nil(t, err)
+				defer f.Close()
+				_, err = f.WriteString(`
+                                components:
+                                - dmh
+                                - unknown
+                                state:
+                                  file: test.json
+                                remote_vault:
+                                  client_uuid: test
+                                  url: http://test
+                                `)
+				require.Nil(t, err)
+			},
+			expectedKoanf: func() *koanf.Koanf {
+				b := []byte(`
+                                components:
+                                - dmh
+                                - unknown
+                                remote_vault:
+                                  client_uuid: test
+                                  url: http://test
+                                state:
+                                  file: test.json
+                                `)
+				k := koanf.New(".")
+				err := k.Load(rawbytes.Provider(b), yaml.Parser())
+				require.Nil(t, err)
+				return k
+			},
+		},
+		{
 			configFunc: func(configFile string) {
 				f, err := os.Create(configFile)
 				require.Nil(t, err)
@@ -616,7 +651,24 @@ func TestGetBulkSMSConfig(t *testing.T) {
 					ID:     "id",
 					Secret: "secret",
 				},
+				RoutingGroup: "STANDARD",
 			},
+		},
+		{
+			koanfFunc: func() *koanf.Koanf {
+				b := []byte(`
+                                execute:
+                                  plugin:
+                                    bulksms:
+                                      token:
+                                        id: id
+                                `)
+				k := koanf.New(".")
+				err := k.Load(rawbytes.Provider(b), yaml.Parser())
+				require.Nil(t, err)
+				return k
+			},
+			shouldPanic: true,
 		},
 	}
 	for _, test := range tests {
@@ -694,6 +746,22 @@ func TestGetMailConfig(t *testing.T) {
 				From:      "from@address",
 				TLSPolicy: "no_tls",
 			},
+		},
+		{
+			koanfFunc: func() *koanf.Koanf {
+				b := []byte(`
+                                execute:
+                                  plugin:
+                                    mail:
+                                      server: server
+                                      from: not-a-valid-address
+                                `)
+				k := koanf.New(".")
+				err := k.Load(rawbytes.Provider(b), yaml.Parser())
+				require.Nil(t, err)
+				return k
+			},
+			shouldPanic: true,
 		},
 	}
 	for _, test := range tests {
