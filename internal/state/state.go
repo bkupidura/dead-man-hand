@@ -3,6 +3,7 @@ package state
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -120,8 +121,11 @@ func New(opts *Options) (StateInterface, error) {
 
 	f, err := os.Open(state.savePath)
 	if err != nil {
-		log.Printf("unable to read state file: %s, creating new state", err)
-		return state, nil
+		if errors.Is(err, os.ErrNotExist) {
+			log.Printf("state file %s does not exist, creating new state", state.savePath)
+			return state, nil
+		}
+		return nil, fmt.Errorf("unable to open state file %s: %w", state.savePath, err)
 	}
 	defer f.Close()
 
@@ -384,6 +388,7 @@ func (s *State) DecryptAction(u string) (*Action, error) {
 	action := &Action{
 		Kind:         encryptedAction.Kind,
 		ProcessAfter: encryptedAction.ProcessAfter,
+		MinInterval:  encryptedAction.MinInterval,
 		Comment:      encryptedAction.Comment,
 		Data:         plainTextData,
 	}

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -94,12 +95,10 @@ func healthHandler() func(http.ResponseWriter, *http.Request) {
 	}
 }
 
-// aliveHandler updates State.LastSeen.
-// aliveHandler also updates LastSeen in vault.
+// aliveHandler updates LastSeen in vault and, only if the vault acknowledges,
+// updates State.LastSeen.
 func aliveHandler(s state.StateInterface, vaultURL string, vaultClientUUID string) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		s.UpdateLastSeen()
-
 		endpointAddress, err := url.JoinPath(vaultURL, "api", "vault", "alive", vaultClientUUID)
 		if err != nil {
 			log.Printf("unable to parse address: %s", err)
@@ -119,6 +118,8 @@ func aliveHandler(s state.StateInterface, vaultURL string, vaultClientUUID strin
 			render.Render(w, r, StatusErrInternal(nil))
 			return
 		}
+
+		s.UpdateLastSeen()
 
 		render.Render(w, r, StatusOK(http.StatusOK))
 	}
@@ -300,7 +301,7 @@ func getVaultSecretHandler(v vault.VaultInterface) func(http.ResponseWriter, *ht
 		s, err := v.GetSecret(paramClientUUID, paramSecretUUID)
 		if err != nil {
 			log.Printf("unable to get vault secret: %s", err)
-			if err.Error() == fmt.Sprintf("secret %s/%s is not released yet", paramClientUUID, paramSecretUUID) {
+			if errors.Is(err, vault.ErrSecretNotReleased) {
 				render.Render(w, r, StatusErrLocked(nil))
 				return
 			}
@@ -334,7 +335,7 @@ func deleteVaultSecretHandler(v vault.VaultInterface) func(http.ResponseWriter, 
 		err := v.DeleteSecret(paramClientUUID, paramSecretUUID)
 		if err != nil {
 			log.Printf("unable to delete secret: %s", err)
-			if err.Error() == fmt.Sprintf("secret %s/%s is not released yet", paramClientUUID, paramSecretUUID) {
+			if errors.Is(err, vault.ErrSecretNotReleased) {
 				render.Render(w, r, StatusErrLocked(nil))
 				return
 			}

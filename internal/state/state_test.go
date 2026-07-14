@@ -75,10 +75,10 @@ func TestActionValidate(t *testing.T) {
 
 func TestNew(t *testing.T) {
 	tests := []struct {
-		inputOptions  *Options
-		expectedError error
-		expectedState func() StateInterface
-		statePathFunc func()
+		inputOptions          *Options
+		expectedErrorContains string
+		expectedState         func() StateInterface
+		statePathFunc         func()
 	}{
 		{
 			inputOptions: &Options{
@@ -115,7 +115,7 @@ func TestNew(t *testing.T) {
 					savePath:        "test_state.json",
 				}
 			},
-			expectedError: fmt.Errorf("unexpected EOF"),
+			expectedErrorContains: "unexpected EOF",
 			statePathFunc: func() {
 				f, err := os.Create("test_state.json")
 				require.Nil(t, err)
@@ -172,15 +172,31 @@ func TestNew(t *testing.T) {
 				require.Nil(t, err)
 			},
 		},
+		{
+			inputOptions: &Options{
+				VaultURL:        "https://dmh-vault.com/endpoint",
+				VaultClientUUID: "random-uuid",
+				SavePath:        "test_blocker/state.json",
+			},
+			expectedErrorContains: "unable to open state file",
+			statePathFunc: func() {
+				require.NoError(t, os.WriteFile("test_blocker", []byte("x"), 0600))
+			},
+		},
 	}
 	for _, test := range tests {
 		os.Remove("test_state.json")
 		test.statePathFunc()
 		defer os.Remove("test_state.json")
+		defer os.Remove("test_blocker")
 
 		s, err := New(test.inputOptions)
 
-		require.Equal(t, test.expectedError, err)
+		if test.expectedErrorContains == "" {
+			require.NoError(t, err)
+		} else {
+			require.ErrorContains(t, err, test.expectedErrorContains)
+		}
 
 		if err != nil {
 			continue
@@ -1688,6 +1704,7 @@ func TestDecryptAction(t *testing.T) {
 					Action: Action{
 						Kind:         "mail",
 						ProcessAfter: 10,
+						MinInterval:  5,
 						Comment:      "a",
 						Data:         encryptedData,
 					},
@@ -1722,6 +1739,7 @@ func TestDecryptAction(t *testing.T) {
 			expectedAction: &Action{
 				Kind:         "mail",
 				ProcessAfter: 10,
+				MinInterval:  5,
 				Comment:      "a",
 				Data:         `{"message":"test","destination":["a@a.com","b@com"],"subject":"test2"}`,
 			},

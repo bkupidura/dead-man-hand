@@ -127,10 +127,11 @@ func TestHealthHandler(t *testing.T) {
 
 func TestAliveHandler(t *testing.T) {
 	tests := []struct {
-		inputVaultURL        string
-		inputVaultClientUUID string
-		fakeHTTPServer       func() *httptest.Server
-		expectedCode         int
+		inputVaultURL         string
+		inputVaultClientUUID  string
+		fakeHTTPServer        func() *httptest.Server
+		expectedCode          int
+		expectLastSeenUpdated bool
 	}{
 		{
 			inputVaultURL:        "http://wrong\r",
@@ -164,7 +165,8 @@ func TestAliveHandler(t *testing.T) {
 				}))
 				return s
 			},
-			expectedCode: http.StatusOK,
+			expectedCode:          http.StatusOK,
+			expectLastSeenUpdated: true,
 		},
 	}
 
@@ -186,6 +188,12 @@ func TestAliveHandler(t *testing.T) {
 
 		handler(w, req)
 		require.Equal(t, test.expectedCode, w.Code)
+
+		if test.expectLastSeenUpdated {
+			s.AssertCalled(t, "UpdateLastSeen")
+		} else {
+			s.AssertNotCalled(t, "UpdateLastSeen")
+		}
 	}
 }
 
@@ -686,7 +694,7 @@ func TestGetVaultSecretHandler(t *testing.T) {
 			inputSecretUUID: "secret-uuid",
 			mockVaultFunc: func() vault.VaultInterface {
 				v := new(mockVault)
-				v.On("GetSecret", "client-uuid", "secret-uuid").Return(nil, fmt.Errorf("secret client-uuid/secret-uuid is not released yet"))
+				v.On("GetSecret", "client-uuid", "secret-uuid").Return(nil, fmt.Errorf("secret client-uuid/secret-uuid %w", vault.ErrSecretNotReleased))
 				return v
 			},
 			expectedCode:     http.StatusLocked,
@@ -812,7 +820,7 @@ func TestDeleteVaultSecretHandler(t *testing.T) {
 			inputSecretUUID: "secret-uuid",
 			mockVaultFunc: func() vault.VaultInterface {
 				v := new(mockVault)
-				v.On("DeleteSecret", "client-uuid", "secret-uuid").Return(fmt.Errorf("secret client-uuid/secret-uuid is not released yet"))
+				v.On("DeleteSecret", "client-uuid", "secret-uuid").Return(fmt.Errorf("secret client-uuid/secret-uuid %w", vault.ErrSecretNotReleased))
 				return v
 			},
 			expectedCode: http.StatusLocked,
