@@ -2,6 +2,7 @@ package vault
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -22,6 +23,10 @@ var (
 	cryptNew    = crypt.New
 	jsonMarshal = json.Marshal
 )
+
+// ErrSecretNotReleased is returned when a secret exists but its release time has
+// not passed yet.
+var ErrSecretNotReleased = errors.New("is not released yet")
 
 // EncryptionMeta stores information about encryption.
 type EncryptionMeta struct {
@@ -73,8 +78,11 @@ func New(opts *Options) (VaultInterface, error) {
 	}
 	f, err := os.Open(v.savePath)
 	if err != nil {
-		log.Printf("unable to read state file: %s, creating new vault", err)
-		return v, nil
+		if errors.Is(err, os.ErrNotExist) {
+			log.Printf("vault file %s does not exist, creating new vault", v.savePath)
+			return v, nil
+		}
+		return nil, fmt.Errorf("unable to open vault file %s: %w", v.savePath, err)
 	}
 	defer f.Close()
 
@@ -121,7 +129,7 @@ func (v *Vault) GetSecret(clientUUID string, secretUUID string) (*Secret, error)
 	}
 
 	if now.Sub(lastSeen) <= time.Duration(secret.ProcessAfter)*v.secretProcessUnit {
-		return nil, fmt.Errorf("secret %s/%s is not released yet", clientUUID, secretUUID)
+		return nil, fmt.Errorf("secret %s/%s %w", clientUUID, secretUUID, ErrSecretNotReleased)
 	}
 
 	c, err := cryptNew(v.key)
@@ -202,7 +210,7 @@ func (v *Vault) DeleteSecret(clientUUID string, secretUUID string) error {
 	}
 
 	if now.Sub(lastSeen) <= time.Duration(secret.ProcessAfter)*v.secretProcessUnit {
-		return fmt.Errorf("secret %s/%s is not released yet", clientUUID, secretUUID)
+		return fmt.Errorf("secret %s/%s %w", clientUUID, secretUUID, ErrSecretNotReleased)
 	}
 
 	delete(clientData.Secrets, secretUUID)

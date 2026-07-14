@@ -35,10 +35,10 @@ func (m *mockCrypt) GetPrivateKey() string {
 func TestNew(t *testing.T) {
 	vaultFile := "test_vault.json"
 	tests := []struct {
-		inputOptions  *Options
-		expectedVault func() VaultInterface
-		expectedError error
-		vaultPathFunc func()
+		inputOptions          *Options
+		expectedVault         func() VaultInterface
+		expectedErrorContains string
+		vaultPathFunc         func()
 	}{
 		{
 			inputOptions: &Options{
@@ -65,8 +65,8 @@ func TestNew(t *testing.T) {
 			expectedVault: func() VaultInterface {
 				return nil
 			},
-			expectedError: fmt.Errorf("SecretProcessUnit must be bigger than second"),
-			vaultPathFunc: func() {},
+			expectedErrorContains: "SecretProcessUnit must be bigger than second",
+			vaultPathFunc:         func() {},
 		},
 		{
 			inputOptions: &Options{
@@ -84,7 +84,7 @@ func TestNew(t *testing.T) {
 				_, err = f.WriteString(`{"broken json`)
 				require.Nil(t, err)
 			},
-			expectedError: fmt.Errorf("unexpected EOF"),
+			expectedErrorContains: "unexpected EOF",
 		},
 		{
 			inputOptions: &Options{
@@ -133,14 +133,31 @@ func TestNew(t *testing.T) {
 				require.Nil(t, err)
 			},
 		},
+		{
+			inputOptions: &Options{
+				Key:               "AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0",
+				SavePath:          "test_blocker_vault/vault.json",
+				SecretProcessUnit: time.Second,
+			},
+			expectedVault:         func() VaultInterface { return nil },
+			expectedErrorContains: "unable to open vault file",
+			vaultPathFunc: func() {
+				require.NoError(t, os.WriteFile("test_blocker_vault", []byte("x"), 0600))
+			},
+		},
 	}
 	for _, test := range tests {
 		os.Remove(vaultFile)
 		test.vaultPathFunc()
 		defer os.Remove(vaultFile)
+		defer os.Remove("test_blocker_vault")
 
 		v, err := New(test.inputOptions)
-		require.Equal(t, test.expectedError, err)
+		if test.expectedErrorContains == "" {
+			require.NoError(t, err)
+		} else {
+			require.ErrorContains(t, err, test.expectedErrorContains)
+		}
 		require.Equal(t, test.expectedVault(), v)
 	}
 }
@@ -276,7 +293,7 @@ func TestGetSecret(t *testing.T) {
 			},
 			inputClientUUID: "testClientUUID",
 			inputSecretUUID: "testSecretUUID",
-			expectedError:   fmt.Errorf("secret testClientUUID/testSecretUUID is not released yet"),
+			expectedError:   fmt.Errorf("secret testClientUUID/testSecretUUID %w", ErrSecretNotReleased),
 		},
 		{
 			inputVault: func() *Vault {
@@ -310,7 +327,7 @@ func TestGetSecret(t *testing.T) {
 			},
 			inputClientUUID: "testClientUUID2",
 			inputSecretUUID: "testSecretUUID2",
-			expectedError:   fmt.Errorf("secret testClientUUID2/testSecretUUID2 is not released yet"),
+			expectedError:   fmt.Errorf("secret testClientUUID2/testSecretUUID2 %w", ErrSecretNotReleased),
 		},
 		{
 			inputVault: func() *Vault {
@@ -344,7 +361,7 @@ func TestGetSecret(t *testing.T) {
 			},
 			inputClientUUID: "testClientUUID",
 			inputSecretUUID: "testSecretUUID",
-			expectedError:   fmt.Errorf("secret testClientUUID/testSecretUUID is not released yet"),
+			expectedError:   fmt.Errorf("secret testClientUUID/testSecretUUID %w", ErrSecretNotReleased),
 		},
 		{
 			inputVault: func() *Vault {
@@ -813,7 +830,7 @@ func TestDeleteSecret(t *testing.T) {
 			},
 			inputClientUUID: "testClientUUID",
 			inputSecretUUID: "testSecretUUID",
-			expectedError:   fmt.Errorf("secret testClientUUID/testSecretUUID is not released yet"),
+			expectedError:   fmt.Errorf("secret testClientUUID/testSecretUUID %w", ErrSecretNotReleased),
 			expectedSecrets: map[string]*Secret{
 				"testSecretUUID": {
 					Key:          "test",
@@ -861,7 +878,7 @@ func TestDeleteSecret(t *testing.T) {
 			},
 			inputClientUUID: "testClientUUID",
 			inputSecretUUID: "testSecretUUID",
-			expectedError:   fmt.Errorf("secret testClientUUID/testSecretUUID is not released yet"),
+			expectedError:   fmt.Errorf("secret testClientUUID/testSecretUUID %w", ErrSecretNotReleased),
 			expectedSecrets: map[string]*Secret{
 				"testSecretUUID": {
 					Key:          "test",
