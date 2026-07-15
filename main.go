@@ -21,9 +21,10 @@ var (
 	getActionsIntervalUnit = time.Minute
 	actionProcessUnit      = time.Hour
 	// mocks for tests
-	stateNew   = state.New
-	executeNew = execute.New
-	vaultNew   = vault.New
+	stateNew         = state.New
+	executeNew       = execute.New
+	vaultNew         = vault.New
+	metricInitialize = metric.Initialize
 )
 
 func main() {
@@ -70,6 +71,7 @@ func main() {
 		s, err = stateNew(&state.Options{
 			VaultURL:        k.String("remote_vault.url"),
 			VaultClientUUID: k.String("remote_vault.client_uuid"),
+			VaultToken:      k.String("remote_vault.token"),
 			SavePath:        k.String("state.file"),
 		})
 		if err != nil {
@@ -100,7 +102,7 @@ func main() {
 		}
 	}
 
-	m := metric.Initialize(&metric.Options{State: s})
+	m := metricInitialize(&metric.Options{State: s, VaultToken: k.String("remote_vault.token")})
 
 	if slices.Contains(enabledComponents, "dmh") {
 		go dispatcher(s, e, m, actionProcessUnit, make(chan bool))
@@ -110,8 +112,10 @@ func main() {
 		State:           s,
 		Vault:           v,
 		Execute:         e,
+		Auth:            getAuthConfig(k),
 		VaultURL:        k.String("remote_vault.url"),
 		VaultClientUUID: k.String("remote_vault.client_uuid"),
+		VaultToken:      k.String("remote_vault.token"),
 		DMHEnabled:      slices.Contains(enabledComponents, "dmh"),
 		VaultEnabled:    slices.Contains(enabledComponents, "vault"),
 		Debug:           k.Bool("debug"),

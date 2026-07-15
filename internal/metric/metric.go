@@ -22,6 +22,7 @@ type PromCollector struct {
 	chStop                 chan bool
 	chSlowStop             chan bool
 	s                      state.StateInterface
+	vaultToken             string
 	dmhActions             *prometheus.GaugeVec
 	dmhMissingSecretsTotal *prometheus.CounterVec
 	dmhActionErrorsTotal   *prometheus.CounterVec
@@ -55,6 +56,7 @@ func Initialize(opts *Options) *PromCollector {
 		chStop:                 make(chan bool),
 		chSlowStop:             make(chan bool),
 		s:                      opts.State,
+		vaultToken:             opts.VaultToken,
 		dmhActions:             dmhActions,
 		dmhMissingSecretsTotal: dmhMissingSecretsTotal,
 		dmhActionErrorsTotal:   dmhActionErrorsTotal,
@@ -116,10 +118,19 @@ func (p *PromCollector) collectSlow() {
 						continue
 					}
 
+					req, err := http.NewRequest("GET", secretUrl, nil)
+					if err != nil {
+						p.dmhMissingSecretsTotal.WithLabelValues(a.UUID).Add(1)
+						continue
+					}
+					if p.vaultToken != "" {
+						req.Header.Set("Authorization", "Bearer "+p.vaultToken)
+					}
+
 					client := http.Client{
 						Timeout: 3 * time.Second,
 					}
-					reg, err := client.Get(secretUrl)
+					reg, err := client.Do(req)
 
 					if err != nil {
 						p.dmhMissingSecretsTotal.WithLabelValues(a.UUID).Add(1)

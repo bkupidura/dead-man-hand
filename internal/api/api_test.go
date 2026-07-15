@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -129,6 +130,8 @@ func TestAliveHandler(t *testing.T) {
 	tests := []struct {
 		inputVaultURL         string
 		inputVaultClientUUID  string
+		inputVaultToken       string
+		mockNewRequest        func(string, string, io.Reader) (*http.Request, error)
 		fakeHTTPServer        func() *httptest.Server
 		expectedCode          int
 		expectLastSeenUpdated bool
@@ -137,6 +140,14 @@ func TestAliveHandler(t *testing.T) {
 			inputVaultURL:        "http://wrong\r",
 			inputVaultClientUUID: "test",
 			expectedCode:         http.StatusInternalServerError,
+		},
+		{
+			inputVaultURL:        "http://test",
+			inputVaultClientUUID: "test",
+			mockNewRequest: func(string, string, io.Reader) (*http.Request, error) {
+				return nil, fmt.Errorf("mockNewRequest error")
+			},
+			expectedCode: http.StatusInternalServerError,
 		},
 		{
 			inputVaultURL:        "http://broken",
@@ -161,6 +172,22 @@ func TestAliveHandler(t *testing.T) {
 			fakeHTTPServer: func() *httptest.Server {
 				s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					require.Equal(t, "/api/vault/alive/test", r.URL.Path)
+					require.Empty(t, r.Header.Get("Authorization"))
+					w.WriteHeader(http.StatusOK)
+				}))
+				return s
+			},
+			expectedCode:          http.StatusOK,
+			expectLastSeenUpdated: true,
+		},
+		{
+			inputVaultURL:        "",
+			inputVaultClientUUID: "test",
+			inputVaultToken:      "test-vault-token",
+			fakeHTTPServer: func() *httptest.Server {
+				s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					require.Equal(t, "/api/vault/alive/test", r.URL.Path)
+					require.Equal(t, "Bearer test-vault-token", r.Header.Get("Authorization"))
 					w.WriteHeader(http.StatusOK)
 				}))
 				return s
@@ -184,7 +211,15 @@ func TestAliveHandler(t *testing.T) {
 
 		}
 
-		handler := aliveHandler(s, test.inputVaultURL, test.inputVaultClientUUID)
+		newRequest = http.NewRequest
+		if test.mockNewRequest != nil {
+			newRequest = test.mockNewRequest
+			defer func() {
+				newRequest = http.NewRequest
+			}()
+		}
+
+		handler := aliveHandler(s, test.inputVaultURL, test.inputVaultClientUUID, test.inputVaultToken)
 
 		handler(w, req)
 		require.Equal(t, test.expectedCode, w.Code)

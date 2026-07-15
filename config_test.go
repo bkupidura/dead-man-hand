@@ -7,6 +7,7 @@ import (
 	"os"
 	"testing"
 
+	"dmh/internal/auth"
 	"dmh/internal/execute"
 
 	"github.com/knadh/koanf/parsers/yaml"
@@ -588,6 +589,114 @@ func TestReadConfigMergeEnvFile(t *testing.T) {
 
 	require.Equal(t, marshaledExpectedK, marshaledK)
 
+}
+
+func TestGetAuthConfig(t *testing.T) {
+	tests := []struct {
+		koanfFunc      func() *koanf.Koanf
+		shouldPanic    bool
+		expectedConfig auth.Config
+	}{
+		{
+			koanfFunc: func() *koanf.Koanf {
+				b := []byte(`
+                                something: 1
+                                `)
+				k := koanf.New(".")
+				err := k.Load(rawbytes.Provider(b), yaml.Parser())
+				require.Nil(t, err)
+				return k
+			},
+			shouldPanic: true,
+		},
+		{
+			koanfFunc: func() *koanf.Koanf {
+				b := []byte(`
+                                auth:
+                                  enabled: true
+                                `)
+				k := koanf.New(".")
+				err := k.Load(rawbytes.Provider(b), yaml.Parser())
+				require.Nil(t, err)
+				return k
+			},
+			shouldPanic: true,
+		},
+		{
+			koanfFunc: func() *koanf.Koanf {
+				b := []byte(`
+                                auth:
+                                  enabled: false
+                                `)
+				k := koanf.New(".")
+				err := k.Load(rawbytes.Provider(b), yaml.Parser())
+				require.Nil(t, err)
+				return k
+			},
+			expectedConfig: auth.Config{
+				Enabled: false,
+			},
+		},
+		{
+			koanfFunc: func() *koanf.Koanf {
+				b := []byte(`
+                                auth:
+                                  anonymous_scope:
+                                    - healthz
+                                    - ready
+                                  bearer:
+                                    token:
+                                      - name: admin
+                                        hash: 6e529315274fd842da9323d9af0805bbef21bd90d2cb30b3cab8fab882d20067
+                                        scope:
+                                          - api
+                                      - name: alive-cron
+                                        hash: 4c5dc9b7708905f77f5e5d16316b5dfb425e68cb326dcd55a860e90a7707031e
+                                        scope:
+                                          - api:alive
+                                `)
+				k := koanf.New(".")
+				err := k.Load(rawbytes.Provider(b), yaml.Parser())
+				require.Nil(t, err)
+				return k
+			},
+			expectedConfig: auth.Config{
+				Enabled:         true,
+				AnonymousScopes: []string{"healthz", "ready"},
+				Bearer: auth.BearerConfig{
+					Tokens: []auth.Token{
+						{Name: "admin", Hash: "6e529315274fd842da9323d9af0805bbef21bd90d2cb30b3cab8fab882d20067", Scopes: []string{"api"}},
+						{Name: "alive-cron", Hash: "4c5dc9b7708905f77f5e5d16316b5dfb425e68cb326dcd55a860e90a7707031e", Scopes: []string{"api:alive"}},
+					},
+				},
+			},
+		},
+		{
+			koanfFunc: func() *koanf.Koanf {
+				b := []byte(`
+                                auth:
+                                  bearer:
+                                    token: 10
+                                `)
+				k := koanf.New(".")
+				err := k.Load(rawbytes.Provider(b), yaml.Parser())
+				require.Nil(t, err)
+				return k
+			},
+			shouldPanic: true,
+		},
+	}
+	for _, test := range tests {
+		k := test.koanfFunc()
+		if test.shouldPanic {
+			require.Panics(t, func() {
+				getAuthConfig(k)
+			})
+		} else {
+			config := getAuthConfig(k)
+			require.Equal(t, test.expectedConfig, config)
+		}
+	}
 }
 
 func TestGetBulkSMSConfig(t *testing.T) {

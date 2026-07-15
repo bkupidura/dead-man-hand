@@ -304,6 +304,7 @@ func TestCollectSlow(t *testing.T) {
 			inputOptions: func() *Options {
 				reg := prometheus.NewRegistry()
 				server200 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					require.Equal(t, "Bearer test-vault-token", r.Header.Get("Authorization"))
 					w.WriteHeader(200)
 				}))
 				server423 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -320,13 +321,15 @@ func TestCollectSlow(t *testing.T) {
 					{Processed: 0, UUID: "uuid4", EncryptionMeta: state.EncryptionMeta{VaultURL: server500.URL}},
 					{Processed: 2, UUID: "uuid5", EncryptionMeta: state.EncryptionMeta{VaultURL: "http://invalid-url"}},
 					{Processed: 0, UUID: "uuid6", EncryptionMeta: state.EncryptionMeta{VaultURL: "http://invalid-url"}},
+					{Processed: 0, UUID: "uuid7", EncryptionMeta: state.EncryptionMeta{VaultURL: "http://invalid-url\r"}},
 				})
-				return &Options{State: s, Registry: reg}
+				return &Options{State: s, Registry: reg, VaultToken: "test-vault-token"}
 			},
 			expectedRegexp: []*regexp.Regexp{
 				regexp.MustCompile(`dmh_missing_secrets_total{action="uuid1"} 1`),
 				regexp.MustCompile(`dmh_missing_secrets_total{action="uuid4"} 1`),
 				regexp.MustCompile(`dmh_missing_secrets_total{action="uuid6"} 1`),
+				regexp.MustCompile(`dmh_missing_secrets_total{action="uuid7"} 1`),
 			},
 			notExpectedRegexp: []*regexp.Regexp{
 				regexp.MustCompile(`dmh_missing_secrets_total{action="uuid2"}`),

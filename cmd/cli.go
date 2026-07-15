@@ -11,6 +11,8 @@ import (
 	"os"
 	"time"
 
+	"dmh/internal/crypt"
+
 	"dmh/internal/state"
 
 	"github.com/urfave/cli/v3"
@@ -24,6 +26,7 @@ var (
 	getClient   = func(cmd *cli.Command) *http.Client {
 		return &http.Client{Timeout: 5 * time.Second}
 	}
+	newBearerToken = crypt.NewBearerToken
 )
 
 const defaultServerAddr = "http://127.0.0.1:8080"
@@ -39,6 +42,12 @@ func createCLI() *cli.Command {
 				Aliases: []string{"s"},
 				Value:   defaultServerAddr,
 				Usage:   "HTTP server address",
+			},
+			&cli.StringFlag{
+				Name:    "token",
+				Aliases: []string{"t"},
+				Usage:   "Bearer token used to authenticate against DMH server",
+				Sources: cli.EnvVars("DMH_TOKEN"),
 			},
 		},
 		Commands: []*cli.Command{
@@ -141,10 +150,31 @@ func createCLI() *cli.Command {
 					},
 				},
 			},
+			{
+				Name:  "auth",
+				Usage: "Authentication management",
+				Commands: []*cli.Command{
+					{
+						Name:   "generate-bearer",
+						Usage:  "Generate a new bearer token (prints plaintext bearer token + its sha256)",
+						Action: genBearer,
+					},
+				},
+			},
 		},
 	}
 }
 
+// genBearer generates bearer token.
+func genBearer(ctx context.Context, cmd *cli.Command) error {
+	token, err := newBearerToken()
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stdout, "BearerToken: %s\n", token.Plaintext)
+	fmt.Fprintf(os.Stdout, "SHA256: %s\n", token.Hash)
+	return nil
+}
 func main() {
 	cmd := createCLI()
 	if err := cmd.Run(context.Background(), os.Args); err != nil {
@@ -186,6 +216,25 @@ type actionFileEntry struct {
 	Comment      string     `yaml:"comment"`
 }
 
+// doRequest sends HTTP request to DMH server with optional bearer token.
+func doRequest(cmd *cli.Command, method string, url string, body []byte) (*http.Response, error) {
+	var reader io.Reader
+	if body != nil {
+		reader = bytes.NewBuffer(body)
+	}
+	req, err := newRequest(method, url, reader)
+	if err != nil {
+		return nil, err
+	}
+	if token := cmd.String("token"); token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	return getClient(cmd).Do(req)
+}
+
 // sendAction validates and sends a single action to given server endpoint.
 func sendAction(cmd *cli.Command, action *state.Action, endpoint string, wantStatus int) error {
 	if err := action.Validate(); err != nil {
@@ -202,7 +251,7 @@ func sendAction(cmd *cli.Command, action *state.Action, endpoint string, wantSta
 		return fmt.Errorf("unable to parse address: %s", err)
 	}
 
-	resp, err := getClient(cmd).Post(endpointAddress, "application/json", bytes.NewBuffer(payload))
+	resp, err := doRequest(cmd, "POST", endpointAddress, payload)
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
 	}
@@ -284,13 +333,12 @@ func processActionsFromFile(cmd *cli.Command, path string, send func(*cli.Comman
 }
 
 func updateAlive(ctx context.Context, cmd *cli.Command) error {
-	client := getClient(cmd)
 	server := cmd.String("server")
 	endpointAddress, err := url.JoinPath(server, "api", "alive")
 	if err != nil {
 		return fmt.Errorf("unable to parse address: %s", err)
 	}
-	resp, err := client.Get(endpointAddress)
+	resp, err := doRequest(cmd, "GET", endpointAddress, nil)
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
 	}
@@ -304,13 +352,12 @@ func updateAlive(ctx context.Context, cmd *cli.Command) error {
 }
 
 func listActions(ctx context.Context, cmd *cli.Command) error {
-	client := getClient(cmd)
 	server := cmd.String("server")
 	endpointAddress, err := url.JoinPath(server, "api", "action", "store")
 	if err != nil {
 		return fmt.Errorf("unable to parse address: %s", err)
 	}
-	resp, err := client.Get(endpointAddress)
+	resp, err := doRequest(cmd, "GET", endpointAddress, nil)
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
 	}
@@ -351,7 +398,6 @@ func addAction(ctx context.Context, cmd *cli.Command) error {
 }
 
 func deleteAction(ctx context.Context, cmd *cli.Command) error {
-	client := getClient(cmd)
 	server := cmd.String("server")
 	uuid := cmd.String("uuid")
 
@@ -364,12 +410,7 @@ func deleteAction(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("unable to parse address: %s", err)
 	}
 
-	req, err := newRequest("DELETE", endpointAddress, nil)
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-
-	resp, err := client.Do(req)
+	resp, err := doRequest(cmd, "DELETE", endpointAddress, nil)
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
 	}

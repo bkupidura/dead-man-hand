@@ -7,6 +7,7 @@ import (
 )
 
 type Options struct {
-	State    state.StateInterface
-	Registry prometheus.Registerer
+	State      state.StateInterface
+	Registry   prometheus.Registerer
+	VaultToken string
 }

@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"dmh/internal/auth"
 	"dmh/internal/crypt"
 	"dmh/internal/execute"
 
@@ -79,6 +80,22 @@ func readConfig(configFile string) *koanf.Koanf {
 	}
 
 	return k
+}
+
+// getAuthConfig returns parsed and validated auth config.
+// Authentication can be disabled with explicit auth.enabled: false.
+func getAuthConfig(k *koanf.Koanf) auth.Config {
+	config := auth.Config{Enabled: true}
+	if err := k.Unmarshal("auth", &config); err != nil {
+		log.Panicf("unable to unmarshal config: %s", err)
+	}
+	if err := config.Validate(); err != nil {
+		log.Panicf("invalid auth config: %s", err)
+	}
+	if !config.Enabled {
+		log.Printf("authentication is DISABLED, all API endpoints are open. THIS IS NOT RECOMMENDED FOR SECURITY REASONS!")
+	}
+	return config
 }
 
 // getBulkSMSConfig returns parsed config for bulksms execute plugin.

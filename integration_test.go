@@ -8,24 +8,70 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
+	"dmh/internal/api"
+	"dmh/internal/metric"
 	"dmh/internal/state"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 )
+
+// Token hashes are used in test configs.
+const (
+	userBearerToken  = "example-bearer-token"
+	vaultBearerToken = "test-token"
+)
+
+// authRequest sends HTTP request with bearer token.
+func authRequest(method string, url string, token string, body []byte) (*http.Response, error) {
+	var reader io.Reader
+	if body != nil {
+		reader = bytes.NewBuffer(body)
+	}
+	req, err := http.NewRequest(method, url, reader)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	return http.DefaultClient.Do(req)
+}
+
+// syncBuffer is goroutine safe bytes.Buffer for capturing logs.
+type syncBuffer struct {
+	mtx sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mtx.Lock()
+	defer b.mtx.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mtx.Lock()
+	defer b.mtx.Unlock()
+	return b.buf.String()
+}
 
 func TestDMH(t *testing.T) {
 	stateFile := "integration_test_state.json"
 	vaultFile := "integration_test_vault.json"
 	configFile := "integration_test_config.yaml"
 	clientUUID := "integration-test-client-uuid"
-	requiredEnvs := map[string]string{"DMH_CONFIG_FILE": configFile}
+	requiredEnvs := map[string]string{"DMH_CONFIG_FILE": configFile, "DMH_COMPONENTS": "dmh,vault"}
 
 	getActionsInterval = 1
 	getActionsIntervalUnit = time.Second
@@ -52,6 +98,20 @@ func TestDMH(t *testing.T) {
     components:
       - dmh
       - vault
+    auth:
+      anonymous_scope:
+        - metrics
+      bearer:
+        token:
+          - name: user
+            hash: 6e529315274fd842da9323d9af0805bbef21bd90d2cb30b3cab8fab882d20067
+            scope:
+              - api:action
+              - api:alive
+          - name: vault-client
+            hash: 4c5dc9b7708905f77f5e5d16316b5dfb425e68cb326dcd55a860e90a7707031e
+            scope:
+              - api:vault
     vault:
       key: AGE-SECRET-KEY-1GEUMZFAZD42WGZFGATTTJHV4SURK8LU507QVCAKXKJP6UTFMJTCS0E3QJ4
       file: %s
@@ -62,6 +122,17 @@ func TestDMH(t *testing.T) {
     remote_vault:
       url: http://127.0.0.1:8080
       client_uuid: %s
+      token: test-token
+    execute:
+      plugin:
+        bulksms:
+          routing_group: standard
+          token:
+            id: test-id
+            secret: test-secret
+        mail:
+          server: 127.0.0.1
+          from: dmh@example.com
     `, vaultFile, stateFile, clientUUID))
 	require.Nil(t, err)
 
@@ -77,6 +148,7 @@ func TestDMH(t *testing.T) {
 		"/action/once":           0,
 		"/action/test":           0,
 		"/action/min_interval":   0,
+		"/action/fail":           0,
 		"/action/never_executed": 0,
 		"/action/missing_key":    0,
 	}
@@ -104,6 +176,10 @@ func TestDMH(t *testing.T) {
 			require.Equal(t, `{"key1":"value1","key2":"action/min_interval"}`, string(body))
 			require.Equal(t, "test1", r.Header.Get("header3"))
 			require.Equal(t, "test2", r.Header.Get("header4"))
+		} else if r.URL.RequestURI() == "/action/fail" {
+			require.Equal(t, `{"key1":"fail"}`, string(body))
+			w.WriteHeader(http.StatusInternalServerError)
+			return
 		} else {
 			require.FailNow(t, fmt.Sprintf("unexpected request to %s", r.URL))
 		}
@@ -131,13 +207,31 @@ func TestDMH(t *testing.T) {
 	actionJson, err := json.Marshal(action)
 	require.Nil(t, err)
 
-	resp, err := http.Post("http://127.0.0.1:8080/api/action/store", "application/json", bytes.NewBuffer(actionJson))
+	resp, err := authRequest("POST", "http://127.0.0.1:8080/api/action/store", userBearerToken, actionJson)
 	require.Nil(t, err)
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 
 	// Lets give alive probe some time to run
 	time.Sleep(3 * time.Second)
+
+	// Lets check that request without token is rejected
+	resp, err = http.Get("http://127.0.0.1:8080/api/action/store")
+	require.Nil(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+
+	// Lets check that request with unknown token is rejected
+	resp, err = authRequest("GET", "http://127.0.0.1:8080/api/action/store", "unknown-token", nil)
+	require.Nil(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+
+	// Lets check that request with valid token but without covering scope is rejected
+	resp, err = authRequest("GET", "http://127.0.0.1:8080/api/action/store", vaultBearerToken, nil)
+	require.Nil(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 
 	// Fetch secrets uuids we know
 	for _, test := range []struct {
@@ -153,7 +247,7 @@ func TestDMH(t *testing.T) {
 			expectedCode:    http.StatusNotFound,
 		},
 	} {
-		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:8080/api/vault/store/%s/%s", clientUUID, test.inputSecretUUID))
+		resp, err := authRequest("GET", fmt.Sprintf("http://127.0.0.1:8080/api/vault/store/%s/%s", clientUUID, test.inputSecretUUID), vaultBearerToken, nil)
 		require.Nil(t, err)
 		defer resp.Body.Close()
 		require.Equal(t, test.expectedCode, resp.StatusCode)
@@ -170,7 +264,7 @@ func TestDMH(t *testing.T) {
 	actionJson, err = json.Marshal(action)
 	require.Nil(t, err)
 
-	resp, err = http.Post("http://127.0.0.1:8080/api/action/test", "application/json", bytes.NewBuffer(actionJson))
+	resp, err = authRequest("POST", "http://127.0.0.1:8080/api/action/test", userBearerToken, actionJson)
 	require.Nil(t, err)
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
@@ -186,7 +280,7 @@ func TestDMH(t *testing.T) {
 	actionJson, err = json.Marshal(action)
 	require.Nil(t, err)
 
-	resp, err = http.Post("http://127.0.0.1:8080/api/action/store", "application/json", bytes.NewBuffer(actionJson))
+	resp, err = authRequest("POST", "http://127.0.0.1:8080/api/action/store", userBearerToken, actionJson)
 	require.Nil(t, err)
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
@@ -203,7 +297,24 @@ func TestDMH(t *testing.T) {
 	actionJson, err = json.Marshal(action)
 	require.Nil(t, err)
 
-	resp, err = http.Post("http://127.0.0.1:8080/api/action/store", "application/json", bytes.NewBuffer(actionJson))
+	resp, err = authRequest("POST", "http://127.0.0.1:8080/api/action/store", userBearerToken, actionJson)
+	require.Nil(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+	// Lets add new Action which will always fail on execution
+	action = &state.Action{
+		Kind:         "json_post",
+		ProcessAfter: 1,
+		MinInterval:  4,
+		Comment:      "fail",
+		Data:         `{"url":"http://127.0.0.1:9090/action/fail","data":{"key1":"fail"},"success_code":[200]}`,
+	}
+
+	actionJson, err = json.Marshal(action)
+	require.Nil(t, err)
+
+	resp, err = authRequest("POST", "http://127.0.0.1:8080/api/action/store", userBearerToken, actionJson)
 	require.Nil(t, err)
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
@@ -212,7 +323,7 @@ func TestDMH(t *testing.T) {
 	time.Sleep(6 * time.Second)
 
 	// Lets update LastSeen
-	resp, err = http.Get("http://127.0.0.1:8080/api/alive")
+	resp, err = authRequest("GET", "http://127.0.0.1:8080/api/alive", userBearerToken, nil)
 	require.Nil(t, err)
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
@@ -228,20 +339,20 @@ func TestDMH(t *testing.T) {
 	actionJson, err = json.Marshal(action)
 	require.Nil(t, err)
 
-	resp, err = http.Post("http://127.0.0.1:8080/api/action/store", "application/json", bytes.NewBuffer(actionJson))
+	resp, err = authRequest("POST", "http://127.0.0.1:8080/api/action/store", userBearerToken, actionJson)
 	require.Nil(t, err)
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 
 	// Lets fetch all actions
 	var actions []*state.EncryptedAction
-	resp, err = http.Get("http://127.0.0.1:8080/api/action/store")
+	resp, err = authRequest("GET", "http://127.0.0.1:8080/api/action/store", userBearerToken, nil)
 	require.Nil(t, err)
 	defer resp.Body.Close()
 	err = json.NewDecoder(resp.Body).Decode(&actions)
 	require.Nil(t, err)
 
-	require.Equal(t, 7, len(actions))
+	require.Equal(t, 8, len(actions))
 	addedActionEncrypted := actions[2]
 	require.NotEqual(t, action.Data, addedActionEncrypted.Data)
 	require.Equal(t, fmt.Sprintf("http://127.0.0.1:8080/api/vault/store/%s/%s", clientUUID, addedActionEncrypted.UUID), addedActionEncrypted.EncryptionMeta.VaultURL)
@@ -298,6 +409,13 @@ func TestDMH(t *testing.T) {
 		},
 		{
 			expectKind:         "json_post",
+			expectProcessAfter: 1,
+			expectMinInterval:  4,
+			expectComment:      "fail",
+			expectProcessed:    0,
+		},
+		{
+			expectKind:         "json_post",
 			expectProcessAfter: 30,
 			expectComment:      "never_executed",
 			expectProcessed:    0,
@@ -320,7 +438,7 @@ func TestDMH(t *testing.T) {
 
 	// Lets check that vault locked all secrets as we updated LastSeen.
 	for _, action := range actions {
-		resp, err = http.Get(fmt.Sprintf("http://127.0.0.1:8080/api/vault/store/%s/%s", clientUUID, action.UUID))
+		resp, err = authRequest("GET", fmt.Sprintf("http://127.0.0.1:8080/api/vault/store/%s/%s", clientUUID, action.UUID), vaultBearerToken, nil)
 		require.Nil(t, err)
 		defer resp.Body.Close()
 
@@ -332,7 +450,7 @@ func TestDMH(t *testing.T) {
 	}
 
 	// Lets fetch single action
-	resp, err = http.Get(fmt.Sprintf("http://127.0.0.1:8080/api/action/store/%s", actions[1].UUID))
+	resp, err = authRequest("GET", fmt.Sprintf("http://127.0.0.1:8080/api/action/store/%s", actions[1].UUID), userBearerToken, nil)
 	require.Nil(t, err)
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
@@ -343,22 +461,19 @@ func TestDMH(t *testing.T) {
 	require.Equal(t, actions[1].UUID, encryptedAction.UUID)
 
 	// Lets delete single action
-	req, err := http.NewRequest("DELETE", fmt.Sprintf("http://127.0.0.1:8080/api/action/store/%s", actions[0].UUID), nil)
-	require.Nil(t, err)
-	client := &http.Client{}
-	resp, err = client.Do(req)
+	resp, err = authRequest("DELETE", fmt.Sprintf("http://127.0.0.1:8080/api/action/store/%s", actions[0].UUID), userBearerToken, nil)
 	require.Nil(t, err)
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
 	// Lets confirm that it was deleted
-	resp, err = http.Get(fmt.Sprintf("http://127.0.0.1:8080/api/action/store/%s", actions[0].UUID))
+	resp, err = authRequest("GET", fmt.Sprintf("http://127.0.0.1:8080/api/action/store/%s", actions[0].UUID), userBearerToken, nil)
 	require.Nil(t, err)
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusNotFound, resp.StatusCode)
 
 	// Lets ensure that all fakeServer endpoints were visited
-	require.Equal(t, 7, len(hitEndpoint))
+	require.Equal(t, 8, len(hitEndpoint))
 	for k, v := range map[string]int{
 		"/alive":                 2,
 		"/test":                  1,
@@ -370,20 +485,22 @@ func TestDMH(t *testing.T) {
 	} {
 		require.Equal(t, v, hitEndpoint[k])
 	}
+	// Failing action is retried on every dispatcher tick, exact count depends on timing.
+	require.GreaterOrEqual(t, hitEndpoint["/action/fail"], 1)
 
 	// Lets confirm vault secret lock status
 	time.Sleep(3 * time.Second)
 
-	resp, err = http.Get("http://127.0.0.1:8080/api/action/store")
+	resp, err = authRequest("GET", "http://127.0.0.1:8080/api/action/store", userBearerToken, nil)
 	require.Nil(t, err)
 	defer resp.Body.Close()
 	err = json.NewDecoder(resp.Body).Decode(&actions)
 	require.Nil(t, err)
 
-	require.Equal(t, 6, len(actions))
+	require.Equal(t, 7, len(actions))
 
 	for _, action := range actions {
-		resp, err = http.Get(fmt.Sprintf("http://127.0.0.1:8080/api/vault/store/%s/%s", clientUUID, action.UUID))
+		resp, err = authRequest("GET", fmt.Sprintf("http://127.0.0.1:8080/api/vault/store/%s/%s", clientUUID, action.UUID), vaultBearerToken, nil)
 		require.Nil(t, err)
 		defer resp.Body.Close()
 
@@ -396,9 +513,7 @@ func TestDMH(t *testing.T) {
 		}
 
 		if (action.Processed == 0 && action.MinInterval == 0) || action.Processed == 2 {
-			req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("http://127.0.0.1:8080/api/vault/store/%s/%s", clientUUID, action.UUID), nil)
-			require.Nil(t, err)
-			resp, err = http.DefaultClient.Do(req)
+			resp, err = authRequest("DELETE", fmt.Sprintf("http://127.0.0.1:8080/api/vault/store/%s/%s", clientUUID, action.UUID), vaultBearerToken, nil)
 			require.Nil(t, err)
 			defer resp.Body.Close()
 			if action.Processed == 0 {
@@ -417,8 +532,175 @@ func TestDMH(t *testing.T) {
 	body, err := io.ReadAll(resp.Body)
 	require.Nil(t, err)
 
-	require.Contains(t, string(body), `dmh_actions{processed="0"} 3`)
+	require.Contains(t, string(body), `dmh_actions{processed="0"} 4`)
 	require.Contains(t, string(body), `dmh_actions{processed="1"} 0`)
 	require.Contains(t, string(body), `dmh_actions{processed="2"} 3`)
 	require.Contains(t, string(body), `dmh_action_errors_total{action="bf577b9d-26f4-4168-b8e4-0e1d692559ed",error="DecryptAction"} 10`)
+	require.Regexp(t, `dmh_action_errors_total{action="[a-f0-9-]+",error="Run"} [0-9]+`, string(body))
+}
+
+func TestDMHAuthDisabled(t *testing.T) {
+	vaultFile := "integration_test_auth_disabled_vault.json"
+	configFile := "integration_test_auth_disabled_config.yaml"
+
+	f, err := os.Create(configFile)
+	defer os.Remove(configFile)
+	require.Nil(t, err)
+	defer f.Close()
+	_, err = f.WriteString(fmt.Sprintf(`
+    components:
+      - vault
+      - unknown
+    auth:
+      enabled: false
+    action:
+      process_unit: minute
+    vault:
+      key: AGE-SECRET-KEY-1GEUMZFAZD42WGZFGATTTJHV4SURK8LU507QVCAKXKJP6UTFMJTCS0E3QJ4
+      file: %s
+    `, vaultFile))
+	require.Nil(t, err)
+	defer os.Remove(vaultFile)
+
+	err = os.Setenv("DMH_CONFIG_FILE", configFile)
+	require.Nil(t, err)
+	defer os.Unsetenv("DMH_CONFIG_FILE")
+
+	oldHTTPPort := api.HTTPPort
+	api.HTTPPort = 18081
+	defer func() { api.HTTPPort = oldHTTPPort }()
+
+	oldMetricInitialize := metricInitialize
+	metricInitialize = func(opts *metric.Options) *metric.PromCollector {
+		opts.Registry = prometheus.NewRegistry()
+		return metric.Initialize(opts)
+	}
+	defer func() { metricInitialize = oldMetricInitialize }()
+
+	logBuf := &syncBuffer{}
+	log.SetOutput(logBuf)
+	defer log.SetOutput(os.Stderr)
+
+	go main()
+	time.Sleep(1 * time.Second)
+
+	require.Contains(t, logBuf.String(), "authentication is DISABLED")
+
+	// Without token, API endpoints reply from handlers and not with 401.
+	resp, err := http.Get("http://127.0.0.1:18081/healthz")
+	require.Nil(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	resp, err = http.Get("http://127.0.0.1:18081/api/vault/store/client-uuid/secret-uuid")
+	require.Nil(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
+}
+
+func TestDMHAuthMissing(t *testing.T) {
+	vaultFile := "integration_test_auth_missing_vault.json"
+	configFile := "integration_test_auth_missing_config.yaml"
+
+	f, err := os.Create(configFile)
+	defer os.Remove(configFile)
+	require.Nil(t, err)
+	defer f.Close()
+	_, err = f.WriteString(fmt.Sprintf(`
+    components:
+      - vault
+    vault:
+      key: AGE-SECRET-KEY-1GEUMZFAZD42WGZFGATTTJHV4SURK8LU507QVCAKXKJP6UTFMJTCS0E3QJ4
+      file: %s
+    `, vaultFile))
+	require.Nil(t, err)
+	defer os.Remove(vaultFile)
+
+	err = os.Setenv("DMH_CONFIG_FILE", configFile)
+	require.Nil(t, err)
+	defer os.Unsetenv("DMH_CONFIG_FILE")
+
+	oldHTTPPort := api.HTTPPort
+	api.HTTPPort = 18082
+	defer func() { api.HTTPPort = oldHTTPPort }()
+
+	oldMetricInitialize := metricInitialize
+	metricInitialize = func(opts *metric.Options) *metric.PromCollector {
+		opts.Registry = prometheus.NewRegistry()
+		return metric.Initialize(opts)
+	}
+	defer func() { metricInitialize = oldMetricInitialize }()
+
+	logBuf := &syncBuffer{}
+	log.SetOutput(logBuf)
+	defer log.SetOutput(os.Stderr)
+
+	require.Panics(t, main)
+	require.Contains(t, logBuf.String(), "auth.bearer.token is not configured")
+}
+
+func TestDMHMissingConfigFile(t *testing.T) {
+	err := os.Setenv("DMH_CONFIG_FILE", "integration-non-existing.yaml")
+	require.Nil(t, err)
+	defer os.Unsetenv("DMH_CONFIG_FILE")
+
+	logBuf := &syncBuffer{}
+	log.SetOutput(logBuf)
+	defer log.SetOutput(os.Stderr)
+
+	require.Panics(t, main)
+	require.Contains(t, logBuf.String(), "error loading config")
+}
+
+func TestDMHAuthInvalid(t *testing.T) {
+	vaultFile := "integration_test_auth_invalid_vault.json"
+	configFile := "integration_test_auth_invalid_config.yaml"
+	defer os.Remove(vaultFile)
+	defer os.Remove(configFile)
+
+	err := os.Setenv("DMH_CONFIG_FILE", configFile)
+	require.Nil(t, err)
+	defer os.Unsetenv("DMH_CONFIG_FILE")
+
+	oldMetricInitialize := metricInitialize
+	metricInitialize = func(opts *metric.Options) *metric.PromCollector {
+		opts.Registry = prometheus.NewRegistry()
+		return metric.Initialize(opts)
+	}
+	defer func() { metricInitialize = oldMetricInitialize }()
+
+	tests := []struct {
+		inputAuthConfig string
+	}{
+		{
+			inputAuthConfig: `
+      bearer:
+        token:
+          - name: admin
+            hash: not-a-hash
+            scope:
+              - api`,
+		},
+		{
+			inputAuthConfig: `
+      bearer:
+        token: 10`,
+		},
+	}
+	for _, test := range tests {
+		f, err := os.Create(configFile)
+		require.Nil(t, err)
+		_, err = f.WriteString(fmt.Sprintf(`
+    components:
+      - vault
+    auth:%s
+    vault:
+      key: AGE-SECRET-KEY-1GEUMZFAZD42WGZFGATTTJHV4SURK8LU507QVCAKXKJP6UTFMJTCS0E3QJ4
+      file: %s
+    `, test.inputAuthConfig, vaultFile))
+		require.Nil(t, err)
+		f.Close()
+
+		require.Panics(t, main)
+	}
 }
