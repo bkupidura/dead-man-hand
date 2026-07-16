@@ -16,8 +16,12 @@ import (
 	"github.com/go-chi/render"
 )
 
-// httpClient is used for the outbound http connections.
-var httpClient = &http.Client{Timeout: 30 * time.Second}
+var (
+	// httpClient is used for the outbound http connections.
+	httpClient = &http.Client{Timeout: 30 * time.Second}
+	// mocks for tests
+	newRequest = http.NewRequest
+)
 
 // ErrResponse is generic error code struct.
 type ErrResponse struct {
@@ -97,7 +101,7 @@ func healthHandler() func(http.ResponseWriter, *http.Request) {
 
 // aliveHandler updates LastSeen in vault and, only if the vault acknowledges,
 // updates State.LastSeen.
-func aliveHandler(s state.StateInterface, vaultURL string, vaultClientUUID string) func(http.ResponseWriter, *http.Request) {
+func aliveHandler(s state.StateInterface, vaultURL string, vaultClientUUID string, vaultToken string) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		endpointAddress, err := url.JoinPath(vaultURL, "api", "vault", "alive", vaultClientUUID)
 		if err != nil {
@@ -106,7 +110,17 @@ func aliveHandler(s state.StateInterface, vaultURL string, vaultClientUUID strin
 			return
 		}
 
-		resp, err := httpClient.Get(endpointAddress)
+		req, err := newRequest("GET", endpointAddress, nil)
+		if err != nil {
+			log.Printf("unable to create request: %s", err)
+			render.Render(w, r, StatusErrInternal(nil))
+			return
+		}
+		if vaultToken != "" {
+			req.Header.Set("Authorization", "Bearer "+vaultToken)
+		}
+
+		resp, err := httpClient.Do(req)
 		if err != nil {
 			log.Printf("unable to connect to vault: %s", err)
 			render.Render(w, r, StatusErrInternal(nil))

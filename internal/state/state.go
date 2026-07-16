@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -103,6 +104,7 @@ type State struct {
 	data            *data
 	vaultURL        string
 	vaultClientUUID string
+	vaultToken      string
 	savePath        string
 }
 
@@ -116,6 +118,7 @@ func New(opts *Options) (StateInterface, error) {
 		},
 		vaultURL:        opts.VaultURL,
 		vaultClientUUID: opts.VaultClientUUID,
+		vaultToken:      opts.VaultToken,
 		savePath:        opts.SavePath,
 	}
 
@@ -184,6 +187,21 @@ func (s *State) GetActionLastRun(u string) (time.Time, error) {
 	return a.LastRun, nil
 }
 
+// vaultRequest sends HTTP request to remote vault with optional bearer token.
+func (s *State) vaultRequest(method string, url string, body io.Reader) (*http.Response, error) {
+	req, err := http.NewRequest(method, url, body)
+	if err != nil {
+		return nil, err
+	}
+	if s.vaultToken != "" {
+		req.Header.Set("Authorization", "Bearer "+s.vaultToken)
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	return httpClient.Do(req)
+}
+
 // AddAction converts Action to EncryptedAction and stores it in State.
 // AddAction also uploads private encryption key to remote vault.
 func (s *State) AddAction(a *Action) error {
@@ -233,7 +251,7 @@ func (s *State) AddAction(a *Action) error {
 		return err
 	}
 
-	resp, err := httpClient.Post(encrypted.EncryptionMeta.VaultURL, "application/json", bytes.NewBuffer(vaultSecretJson))
+	resp, err := s.vaultRequest(http.MethodPost, encrypted.EncryptionMeta.VaultURL, bytes.NewBuffer(vaultSecretJson))
 	if err != nil {
 		return err
 	}
@@ -314,12 +332,7 @@ func (s *State) MarkActionAsProcessed(u string) error {
 		return err
 	}
 
-	req, err := http.NewRequest(http.MethodDelete, a.EncryptionMeta.VaultURL, nil)
-	if err != nil {
-		return err
-	}
-
-	resp, err := httpClient.Do(req)
+	resp, err := s.vaultRequest(http.MethodDelete, a.EncryptionMeta.VaultURL, nil)
 	if err != nil {
 		return err
 	}
@@ -361,7 +374,7 @@ func (s *State) DecryptAction(u string) (*Action, error) {
 		return nil, fmt.Errorf("missing action with uuid %s", u)
 	}
 
-	resp, err := httpClient.Get(encryptedAction.EncryptionMeta.VaultURL)
+	resp, err := s.vaultRequest(http.MethodGet, encryptedAction.EncryptionMeta.VaultURL, nil)
 	if err != nil {
 		return nil, err
 	}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -8,9 +9,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"regexp"
 	"testing"
 	"time"
 
+	"dmh/internal/crypt"
 	"dmh/internal/state"
 
 	"github.com/stretchr/testify/require"
@@ -99,9 +102,23 @@ func TestActionDeleteRequiredParams(t *testing.T) {
 func TestUpdateAlive(t *testing.T) {
 	tests := []struct {
 		inputServer   string
+		inputTokenEnv string
 		mockHandler   http.HandlerFunc
 		expectedError string
 	}{
+		{
+			inputTokenEnv: "env-token",
+			mockHandler: func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, "Bearer env-token", r.Header.Get("Authorization"))
+				w.WriteHeader(http.StatusOK)
+			},
+		},
+		{
+			mockHandler: func(w http.ResponseWriter, r *http.Request) {
+				require.Empty(t, r.Header.Get("Authorization"))
+				w.WriteHeader(http.StatusOK)
+			},
+		},
 		{
 			inputServer:   "\r",
 			expectedError: `unable to parse address: parse "\r": net/url: invalid control character in URL`,
@@ -134,6 +151,14 @@ func TestUpdateAlive(t *testing.T) {
 			}
 		}
 
+		if test.inputTokenEnv != "" {
+			err := os.Setenv("DMH_TOKEN", test.inputTokenEnv)
+			require.Nil(t, err)
+		} else {
+			os.Unsetenv("DMH_TOKEN")
+		}
+		defer os.Unsetenv("DMH_TOKEN")
+
 		cmd := createCLI()
 		var params []string
 		if test.inputServer != "" {
@@ -160,7 +185,15 @@ func TestListActions(t *testing.T) {
 		mockHandler   http.HandlerFunc
 		expectedError string
 		inputServer   string
+		inputToken    string
 	}{
+		{
+			inputToken: "test-token",
+			mockHandler: func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
+				w.WriteHeader(http.StatusOK)
+			},
+		},
 		{
 			inputServer:   "\r",
 			expectedError: `unable to parse address: parse "\r": net/url: invalid control character in URL`,
@@ -202,6 +235,9 @@ func TestListActions(t *testing.T) {
 		} else {
 			params = []string{"dmh-cli", "action", "list"}
 		}
+		if test.inputToken != "" {
+			params = append(params, "--token", test.inputToken)
+		}
 
 		err := cmd.Run(context.Background(), params)
 		if test.expectedError == "" {
@@ -219,10 +255,19 @@ func TestAddAction(t *testing.T) {
 		mockHandler     http.HandlerFunc
 		inputParams     []string
 		inputServer     string
+		inputToken      string
 		expectedError   string
 		checkBody       func(*testing.T, []byte)
 		mockJsonMarshal func(v any) ([]byte, error)
 	}{
+		{
+			inputParams: []string{"--data", `{"test": true}`, "--kind", "test", "--process-after", "10"},
+			inputToken:  "add-token",
+			mockHandler: func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, "Bearer add-token", r.Header.Get("Authorization"))
+				w.WriteHeader(http.StatusCreated)
+			},
+		},
 		{
 			inputParams:   []string{"--data", "", "--kind", "test", "--process-after", "10"},
 			expectedError: "data is required",
@@ -311,6 +356,9 @@ func TestAddAction(t *testing.T) {
 		} else {
 			params = []string{"dmh-cli", "action", "add"}
 		}
+		if test.inputToken != "" {
+			params = append(params, "--token", test.inputToken)
+		}
 
 		params = append(params, test.inputParams...)
 
@@ -334,9 +382,18 @@ func TestTestAction(t *testing.T) {
 		mockHandler     http.HandlerFunc
 		inputParams     []string
 		inputServer     string
+		inputToken      string
 		expectedError   string
 		mockJsonMarshal func(v any) ([]byte, error)
 	}{
+		{
+			inputParams: []string{"--data", `{"test": true}`, "--kind", "test", "--process-after", "10"},
+			inputToken:  "test-token",
+			mockHandler: func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
+				w.WriteHeader(http.StatusOK)
+			},
+		},
 		{
 			inputParams:   []string{"--data", "", "--kind", "test", "--process-after", "10"},
 			expectedError: "data is required",
@@ -399,6 +456,9 @@ func TestTestAction(t *testing.T) {
 		} else {
 			params = []string{"dmh-cli", "action", "test"}
 		}
+		if test.inputToken != "" {
+			params = append(params, "--token", test.inputToken)
+		}
 
 		params = append(params, test.inputParams...)
 
@@ -418,9 +478,18 @@ func TestDeleteAction(t *testing.T) {
 		mockHandler    http.HandlerFunc
 		inputParams    []string
 		inputServer    string
+		inputToken     string
 		expectedError  string
 		mockNewRequest func(method, url string, body io.Reader) (*http.Request, error)
 	}{
+		{
+			inputParams: []string{"--uuid", "test-uuid"},
+			inputToken:  "delete-token",
+			mockHandler: func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, "Bearer delete-token", r.Header.Get("Authorization"))
+				w.WriteHeader(http.StatusOK)
+			},
+		},
 		{
 			inputParams:   []string{"--uuid", ""},
 			expectedError: "uuid is required",
@@ -449,7 +518,7 @@ func TestDeleteAction(t *testing.T) {
 		},
 		{
 			inputParams:   []string{"--uuid", "test-uuid"},
-			expectedError: "failed to create request",
+			expectedError: "request failed: forced newRequest error",
 			mockNewRequest: func(method, url string, body io.Reader) (*http.Request, error) {
 				return nil, fmt.Errorf("forced newRequest error")
 			},
@@ -482,6 +551,9 @@ func TestDeleteAction(t *testing.T) {
 			params = []string{"dmh-cli", "action", "delete", "--server", fakeServer.URL}
 		} else {
 			params = []string{"dmh-cli", "action", "delete"}
+		}
+		if test.inputToken != "" {
+			params = append(params, "--token", test.inputToken)
 		}
 
 		params = append(params, test.inputParams...)
@@ -796,9 +868,18 @@ func TestCreateAction(t *testing.T) {
 		mockHandler     http.HandlerFunc
 		mockJsonMarshal func(v any) ([]byte, error)
 		inputServer     string
+		inputToken      string
 		expectedError   string
 		checkBody       func(*testing.T, []byte)
 	}{
+		{
+			action:     &state.Action{Kind: "test", Data: `{"test": true}`, ProcessAfter: 10},
+			inputToken: "create-token",
+			mockHandler: func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, "Bearer create-token", r.Header.Get("Authorization"))
+				w.WriteHeader(http.StatusCreated)
+			},
+		},
 		{
 			action:        &state.Action{Kind: "test", ProcessAfter: 10},
 			expectedError: "data is required",
@@ -871,6 +952,9 @@ func TestCreateAction(t *testing.T) {
 		} else if fakeServer != nil {
 			cmd.Set("server", fakeServer.URL)
 		}
+		if test.inputToken != "" {
+			cmd.Set("token", test.inputToken)
+		}
 
 		err := createAction(cmd, test.action)
 
@@ -942,5 +1026,71 @@ func TestActionDataUnmarshalYAML(t *testing.T) {
 				require.Equal(t, tt.expected, entry.Data.Value)
 			}
 		})
+	}
+}
+
+// captureCLIOutput runs the CLI with the given args and returns captured stdout.
+func captureCLIOutput(t *testing.T, args ...string) (string, error) {
+	t.Helper()
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stdout = w
+
+	cmd := createCLI()
+	runErr := cmd.Run(context.Background(), args)
+
+	w.Close()
+	os.Stdout = old
+
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, r)
+	return buf.String(), runErr
+}
+
+func TestGenBearer(t *testing.T) {
+	tests := []struct {
+		mockToken     func() (crypt.BearerToken, error)
+		expectedError string
+		expectedRegex []string
+	}{
+		{
+			expectedRegex: []string{`BearerToken:\s*[a-zA-Z0-9_-]{43}`, `SHA256:\s*[a-f0-9]{64}`},
+		},
+		{
+			mockToken:     func() (crypt.BearerToken, error) { return crypt.BearerToken{}, fmt.Errorf("crypto failure") },
+			expectedError: "crypto failure",
+		},
+	}
+
+	for _, test := range tests {
+		original := newBearerToken
+		defer func() { newBearerToken = original }()
+		if test.mockToken != nil {
+			newBearerToken = test.mockToken
+		}
+
+		out, err := captureCLIOutput(t, "dmh-cli", "auth", "generate-bearer")
+
+		if test.expectedError != "" {
+			require.NotNil(t, err)
+			require.Equal(t, test.expectedError, err.Error())
+		} else {
+			require.Nil(t, err)
+			require.Contains(t, out, "BearerToken:")
+			require.Contains(t, out, "SHA256:")
+
+			// Validate output matches regex patterns
+			for _, pattern := range test.expectedRegex {
+				require.Regexp(t, `(?m)`+pattern, out)
+			}
+
+			// Printed hash must belong to printed token.
+			tokenMatch := regexp.MustCompile(`BearerToken:\s*(\S+)`).FindStringSubmatch(out)
+			require.Len(t, tokenMatch, 2)
+			hashMatch := regexp.MustCompile(`SHA256:\s*(\S+)`).FindStringSubmatch(out)
+			require.Len(t, hashMatch, 2)
+			require.True(t, crypt.ValidateBearerToken(hashMatch[1], tokenMatch[1]))
+		}
 	}
 }

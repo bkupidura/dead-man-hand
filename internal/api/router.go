@@ -1,6 +1,8 @@
 package api
 
 import (
+	"dmh/internal/auth"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -13,6 +15,10 @@ func NewRouter(opts *Options) *chi.Mux {
 	httpRouter.Group(func(r chi.Router) {
 		r.Use(middleware.CleanPath)
 		r.Use(middleware.Recoverer)
+		if opts.Auth.Enabled {
+			r.Use(auth.BearerAuthenticator(opts.Auth.Bearer.Tokens))
+			r.Use(auth.Authorizer(opts.Auth.AnonymousScopes))
+		}
 		r.Get("/ready", healthHandler())
 		r.Get("/healthz", healthHandler())
 		r.Method("GET", "/metrics", promhttp.Handler())
@@ -21,8 +27,8 @@ func NewRouter(opts *Options) *chi.Mux {
 		}
 		if opts.DMHEnabled {
 			r.Route("/api/alive", func(r chi.Router) {
-				r.Get("/", aliveHandler(opts.State, opts.VaultURL, opts.VaultClientUUID))
-				r.Post("/", aliveHandler(opts.State, opts.VaultURL, opts.VaultClientUUID))
+				r.Get("/", aliveHandler(opts.State, opts.VaultURL, opts.VaultClientUUID, opts.VaultToken))
+				r.Post("/", aliveHandler(opts.State, opts.VaultURL, opts.VaultClientUUID, opts.VaultToken))
 			})
 			r.Route("/api/action/test", func(r chi.Router) {
 				r.Post("/", testActionHandler(opts.Execute))
