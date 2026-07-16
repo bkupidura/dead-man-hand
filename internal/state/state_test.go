@@ -1,6 +1,7 @@
 package state
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -275,6 +276,116 @@ func TestGetActionLastRun(t *testing.T) {
 	lr, err = s.GetActionLastRun("test")
 	require.Nil(t, err)
 	require.Equal(t, s.data.Actions[0].LastRun, lr)
+}
+
+func TestVaultRequest(t *testing.T) {
+	tests := []struct {
+		method        string
+		inputToken    string
+		inputPath     string
+		inputURL      string
+		body          io.Reader
+		mockHandler   http.HandlerFunc
+		expectedError bool
+	}{
+		{
+			method:     "GET",
+			inputToken: "test-vault-token",
+			inputPath:  "/api/vault/store/client-uuid/secret-uuid",
+			mockHandler: func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, "GET", r.Method)
+				require.Equal(t, "/api/vault/store/client-uuid/secret-uuid", r.URL.Path)
+				require.Equal(t, "Bearer test-vault-token", r.Header.Get("Authorization"))
+				require.Empty(t, r.Header.Get("Content-Type"))
+				body, err := io.ReadAll(r.Body)
+				require.Nil(t, err)
+				require.Empty(t, body)
+				w.WriteHeader(http.StatusOK)
+			},
+		},
+		{
+			method:    "GET",
+			inputPath: "/api/vault/alive/client-uuid",
+			mockHandler: func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, "GET", r.Method)
+				require.Equal(t, "/api/vault/alive/client-uuid", r.URL.Path)
+				require.Empty(t, r.Header.Get("Authorization"))
+				require.Empty(t, r.Header.Get("Content-Type"))
+				w.WriteHeader(http.StatusOK)
+			},
+		},
+		{
+			method:    "POST",
+			inputPath: "/api/vault/store/client-uuid/secret-uuid",
+			body:      bytes.NewBufferString(`{"test": true}`),
+			mockHandler: func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, "POST", r.Method)
+				require.Equal(t, "/api/vault/store/client-uuid/secret-uuid", r.URL.Path)
+				require.Empty(t, r.Header.Get("Authorization"))
+				require.Equal(t, "application/json", r.Header.Get("Content-Type"))
+				body, err := io.ReadAll(r.Body)
+				require.Nil(t, err)
+				require.Equal(t, `{"test": true}`, string(body))
+				w.WriteHeader(http.StatusOK)
+			},
+		},
+		{
+			method:     "POST",
+			inputToken: "post-vault-token",
+			inputPath:  "/api/vault/store/client-uuid/secret-uuid",
+			body:       bytes.NewBufferString(`{"post": true}`),
+			mockHandler: func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, "POST", r.Method)
+				require.Equal(t, "/api/vault/store/client-uuid/secret-uuid", r.URL.Path)
+				require.Equal(t, "Bearer post-vault-token", r.Header.Get("Authorization"))
+				require.Equal(t, "application/json", r.Header.Get("Content-Type"))
+				body, err := io.ReadAll(r.Body)
+				require.Nil(t, err)
+				require.Equal(t, `{"post": true}`, string(body))
+				w.WriteHeader(http.StatusOK)
+			},
+		},
+		{
+			method:     "DELETE",
+			inputToken: "delete-vault-token",
+			inputPath:  "/api/vault/store/client-uuid/secret-uuid",
+			mockHandler: func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, "DELETE", r.Method)
+				require.Equal(t, "/api/vault/store/client-uuid/secret-uuid", r.URL.Path)
+				require.Equal(t, "Bearer delete-vault-token", r.Header.Get("Authorization"))
+				require.Empty(t, r.Header.Get("Content-Type"))
+				body, err := io.ReadAll(r.Body)
+				require.Nil(t, err)
+				require.Empty(t, body)
+				w.WriteHeader(http.StatusOK)
+			},
+		},
+		{
+			method:        "POST",
+			inputURL:      "http\r",
+			expectedError: true,
+		},
+	}
+	for _, test := range tests {
+		requestURL := test.inputURL
+		if test.mockHandler != nil {
+			fakeServer := httptest.NewServer(test.mockHandler)
+			defer fakeServer.Close()
+			requestURL = fakeServer.URL + test.inputPath
+		}
+
+		s := &State{
+			vaultToken: test.inputToken,
+		}
+
+		resp, err := s.vaultRequest(test.method, requestURL, test.body)
+		if test.expectedError {
+			require.Error(t, err)
+		} else {
+			require.Nil(t, err)
+			resp.Body.Close()
+		}
+	}
 }
 
 func TestAddAction(t *testing.T) {
@@ -713,6 +824,13 @@ func TestGetActions(t *testing.T) {
 		s := test.inputState()
 		actions := s.GetActions()
 		require.Equal(t, test.expectedActions, actions)
+
+		// Returned actions must be copies, so callers can read them without holding State lock.
+		for i, a := range actions {
+			require.NotSame(t, s.(*State).data.Actions[i], a)
+			a.Processed = 99
+			require.NotEqual(t, 99, s.(*State).data.Actions[i].Processed)
+		}
 	}
 }
 func TestGetAction(t *testing.T) {
@@ -811,6 +929,13 @@ func TestGetAction(t *testing.T) {
 		a, i := s.GetAction(test.inputUUID)
 		require.Equal(t, test.expectedAction, a)
 		require.Equal(t, test.expectedIndex, i)
+
+		// Returned action must be a copy, so callers can read it without holding State lock.
+		if a != nil {
+			require.NotSame(t, s.(*State).data.Actions[i], a)
+			a.Processed = 99
+			require.NotEqual(t, 99, s.(*State).data.Actions[i].Processed)
+		}
 	}
 }
 func TestDeleteAction(t *testing.T) {
@@ -957,59 +1082,6 @@ func TestMarkActionAsProcessed(t *testing.T) {
 		},
 		{
 			inputState: func() StateInterface {
-				s, err := New(&Options{SavePath: "test_state.json"})
-				require.Nil(t, err)
-				s.(*State).data.Actions = []*EncryptedAction{
-					{
-						Action: Action{
-							Kind:         "mail",
-							ProcessAfter: 20,
-							Comment:      "test",
-							Data:         "encrypted",
-						},
-						UUID:      "test",
-						Processed: 0,
-					},
-					{
-						Action: Action{
-							Kind:         "mail",
-							ProcessAfter: 20,
-							Comment:      "test",
-							Data:         "encrypted2",
-						},
-						UUID:      "test2",
-						Processed: 0,
-					},
-				}
-				return s
-			},
-			inputUUID: "test3",
-			expectedActions: []*EncryptedAction{
-				{
-					Action: Action{
-						Kind:         "mail",
-						ProcessAfter: 20,
-						Comment:      "test",
-						Data:         "encrypted",
-					},
-					UUID:      "test",
-					Processed: 0,
-				},
-				{
-					Action: Action{
-						Kind:         "mail",
-						ProcessAfter: 20,
-						Comment:      "test",
-						Data:         "encrypted2",
-					},
-					UUID:      "test2",
-					Processed: 0,
-				},
-			},
-			expectedError: true,
-		},
-		{
-			inputState: func() StateInterface {
 				s, err := New(&Options{SavePath: "test_state.json", VaultClientUUID: "client-random-uuid"})
 				require.Nil(t, err)
 				s.(*State).data.Actions = []*EncryptedAction{
@@ -1089,65 +1161,6 @@ func TestMarkActionAsProcessed(t *testing.T) {
 							Comment:      "test",
 							Data:         "encrypted2",
 						},
-						UUID:      "test2",
-						Processed: 0,
-						EncryptionMeta: EncryptionMeta{
-							VaultURL: "http://non-existing",
-						},
-					},
-				}
-				return s
-			},
-			inputUUID: "test2",
-			expectedActions: []*EncryptedAction{
-				{
-					Action: Action{
-						Kind:         "mail",
-						ProcessAfter: 20,
-						Comment:      "test",
-						Data:         "encrypted",
-					},
-					UUID:      "test",
-					Processed: 0,
-				},
-				{
-					Action: Action{
-						Kind:         "mail",
-						ProcessAfter: 20,
-						Comment:      "test",
-						Data:         "encrypted2",
-					},
-					UUID:      "test2",
-					Processed: 1,
-					EncryptionMeta: EncryptionMeta{
-						VaultURL: "http://non-existing",
-					},
-				},
-			},
-			expectedError: true,
-		},
-		{
-			inputState: func() StateInterface {
-				s, err := New(&Options{SavePath: "test_state.json", VaultClientUUID: "client-random-uuid"})
-				require.Nil(t, err)
-				s.(*State).data.Actions = []*EncryptedAction{
-					{
-						Action: Action{
-							Kind:         "mail",
-							ProcessAfter: 20,
-							Comment:      "test",
-							Data:         "encrypted",
-						},
-						UUID:      "test",
-						Processed: 0,
-					},
-					{
-						Action: Action{
-							Kind:         "mail",
-							ProcessAfter: 20,
-							Comment:      "test",
-							Data:         "encrypted2",
-						},
 						UUID:           "test2",
 						Processed:      0,
 						EncryptionMeta: EncryptionMeta{},
@@ -1183,68 +1196,6 @@ func TestMarkActionAsProcessed(t *testing.T) {
 				s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					require.Equal(t, "/api/vault/store/client-random-uuid/test2", r.URL.Path)
 					w.WriteHeader(http.StatusBadRequest)
-				}))
-				return s
-			},
-			expectedError: true,
-		},
-		{
-			inputState: func() StateInterface {
-				s, err := New(&Options{SavePath: "test_state.json", VaultClientUUID: "client-random-uuid"})
-				require.Nil(t, err)
-				s.(*State).data.Actions = []*EncryptedAction{
-					{
-						Action: Action{
-							Kind:         "mail",
-							ProcessAfter: 20,
-							Comment:      "test",
-							Data:         "encrypted",
-						},
-						UUID:      "test",
-						Processed: 0,
-					},
-					{
-						Action: Action{
-							Kind:         "mail",
-							ProcessAfter: 20,
-							Comment:      "test",
-							Data:         "encrypted2",
-						},
-						UUID:           "test2",
-						Processed:      0,
-						EncryptionMeta: EncryptionMeta{},
-					},
-				}
-				return s
-			},
-			inputUUID: "test2",
-			expectedActions: []*EncryptedAction{
-				{
-					Action: Action{
-						Kind:         "mail",
-						ProcessAfter: 20,
-						Comment:      "test",
-						Data:         "encrypted",
-					},
-					UUID:      "test",
-					Processed: 0,
-				},
-				{
-					Action: Action{
-						Kind:         "mail",
-						ProcessAfter: 20,
-						Comment:      "test",
-						Data:         "encrypted2",
-					},
-					UUID:           "test2",
-					Processed:      1,
-					EncryptionMeta: EncryptionMeta{},
-				},
-			},
-			fakeHTTPServer: func() *httptest.Server {
-				s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					require.Equal(t, "/api/vault/store/client-random-uuid/test2", r.URL.Path)
-					w.WriteHeader(http.StatusLocked)
 				}))
 				return s
 			},
@@ -1434,6 +1385,58 @@ func TestMarkActionAsProcessed(t *testing.T) {
 		} else {
 			require.Nil(t, err)
 		}
+	}
+}
+
+func TestSetActionProcessed(t *testing.T) {
+	tests := []struct {
+		inputUUID         string
+		inputProcessed    int
+		expectedError     error
+		expectedProcessed int
+	}{
+		{
+			inputUUID:      "non-existing",
+			inputProcessed: 1,
+			expectedError:  fmt.Errorf("missing action with uuid non-existing"),
+		},
+		{
+			inputUUID:         "test",
+			inputProcessed:    1,
+			expectedProcessed: 1,
+		},
+		{
+			inputUUID:         "test",
+			inputProcessed:    2,
+			expectedProcessed: 2,
+		},
+	}
+	for _, test := range tests {
+		os.Remove("test_state.json")
+		defer os.Remove("test_state.json")
+
+		s := &State{
+			data: &data{
+				Actions: []*EncryptedAction{
+					{UUID: "test", Processed: 0},
+				},
+			},
+			savePath: "test_state.json",
+		}
+
+		a, err := s.setActionProcessed(test.inputUUID, test.inputProcessed)
+		require.Equal(t, test.expectedError, err)
+
+		if test.expectedError != nil {
+			require.Nil(t, a)
+			continue
+		}
+		require.Equal(t, test.expectedProcessed, a.Processed)
+		require.Equal(t, test.expectedProcessed, s.data.Actions[0].Processed)
+
+		// Returned action must be a copy, so callers can read it without holding State lock.
+		a.Processed = 99
+		require.NotEqual(t, 99, s.data.Actions[0].Processed)
 	}
 }
 
