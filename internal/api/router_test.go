@@ -62,7 +62,6 @@ func TestNewRouter(t *testing.T) {
 		{
 			inputOptions: func() *Options {
 				s := new(mockState)
-				s.On("UpdateLastSeen").Return()
 				return &Options{State: s, DMHEnabled: true}
 			},
 			method:     "GET",
@@ -72,12 +71,11 @@ func TestNewRouter(t *testing.T) {
 		{
 			inputOptions: func() *Options {
 				s := new(mockState)
-				s.On("UpdateLastSeen").Return()
 				return &Options{State: s, DMHEnabled: true}
 			},
 			method:     "POST",
 			path:       "/api/alive",
-			statusCode: http.StatusInternalServerError,
+			statusCode: http.StatusMethodNotAllowed,
 		},
 		{
 			inputOptions: func() *Options {
@@ -95,6 +93,42 @@ func TestNewRouter(t *testing.T) {
 			},
 			method:     "POST",
 			path:       "/api/alive",
+			statusCode: http.StatusNotFound,
+		},
+		{
+			inputOptions: func() *Options {
+				s := new(mockState)
+				return &Options{State: s, DMHEnabled: true}
+			},
+			method:     "GET",
+			path:       "/alive",
+			statusCode: http.StatusOK,
+		},
+		{
+			inputOptions: func() *Options {
+				s := new(mockState)
+				return &Options{State: s, DMHEnabled: false}
+			},
+			method:     "GET",
+			path:       "/alive",
+			statusCode: http.StatusNotFound,
+		},
+		{
+			inputOptions: func() *Options {
+				s := new(mockState)
+				return &Options{State: s, DMHEnabled: true}
+			},
+			method:     "POST",
+			path:       "/alive",
+			statusCode: http.StatusInternalServerError,
+		},
+		{
+			inputOptions: func() *Options {
+				s := new(mockState)
+				return &Options{State: s, DMHEnabled: false}
+			},
+			method:     "POST",
+			path:       "/alive",
 			statusCode: http.StatusNotFound,
 		},
 		{
