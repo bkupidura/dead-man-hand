@@ -1,7 +1,10 @@
 package auth
 
 import (
+	"fmt"
 	"testing"
+
+	"dmh/internal/crypt"
 
 	"github.com/stretchr/testify/require"
 )
@@ -30,7 +33,7 @@ func TestConfigValidate(t *testing.T) {
 		},
 		{
 			inputConfig:   Config{Enabled: true},
-			expectedError: "auth.bearer.token is not configured, generate token with dmh-cli auth generate-bearer or explicitly disable authentication with auth.enabled: false",
+			expectedError: "bearer: auth.bearer.token is not configured, generate token with dmh-cli auth generate-bearer",
 		},
 		{
 			inputConfig: Config{
@@ -48,11 +51,12 @@ func TestConfigValidate(t *testing.T) {
 				Enabled: true,
 				Bearer: BearerConfig{
 					Tokens: []Token{
-						{Name: "", Hash: testTokenHash, Scopes: []string{"api"}},
+						{Name: "admin", Hash: testTokenHash, Scopes: []string{"api"}},
 					},
 				},
+				AnonymousScopes: []string{"healthz:"},
 			},
-			expectedError: "bearer: token name is required",
+			expectedError: "anonymous_scopes: scope healthz: cant contain empty segments",
 		},
 		{
 			inputConfig: Config{
@@ -62,9 +66,9 @@ func TestConfigValidate(t *testing.T) {
 						{Name: "admin", Hash: testTokenHash, Scopes: []string{"api"}},
 					},
 				},
-				AnonymousScopes: []string{"healthz:"},
+				SignedURL: SignedURLConfig{TTL: -1},
 			},
-			expectedError: "anonymous_scopes: scope healthz: cant contain empty segments",
+			expectedError: "signed_url: ttl must be greater than 0",
 		},
 	}
 	for _, test := range tests {
@@ -84,7 +88,8 @@ func TestBearerValidate(t *testing.T) {
 		expectedError string
 	}{
 		{
-			inputConfig: BearerConfig{},
+			inputConfig:   BearerConfig{},
+			expectedError: "auth.bearer.token is not configured, generate token with dmh-cli auth generate-bearer",
 		},
 		{
 			inputConfig: BearerConfig{
@@ -199,6 +204,61 @@ func TestValidateScope(t *testing.T) {
 		} else {
 			require.NotNil(t, err)
 			require.Equal(t, test.expectedError, err.Error())
+		}
+	}
+}
+
+func TestSignedURLValidate(t *testing.T) {
+	tests := []struct {
+		inputConfig    SignedURLConfig
+		mockNewSecret  func() (string, error)
+		expectedError  string
+		expectedSecret string
+		expectedTTL    int
+	}{
+		{
+			inputConfig: SignedURLConfig{},
+			expectedTTL: 24,
+		},
+		{
+			inputConfig:    SignedURLConfig{Secret: "test-secret"},
+			expectedSecret: "test-secret",
+			expectedTTL:    24,
+		},
+		{
+			inputConfig:    SignedURLConfig{Secret: "test-secret", TTL: 12},
+			expectedSecret: "test-secret",
+			expectedTTL:    12,
+		},
+		{
+			inputConfig:   SignedURLConfig{Secret: "test-secret", TTL: -1},
+			expectedError: "ttl must be greater than 0",
+		},
+		{
+			inputConfig:   SignedURLConfig{},
+			mockNewSecret: func() (string, error) { return "", fmt.Errorf("unable to generate signed url secret") },
+			expectedError: "unable to generate signed url secret",
+		},
+	}
+	for _, test := range tests {
+		newSignedURLSecret = crypt.NewSignedURLSecret
+		if test.mockNewSecret != nil {
+			newSignedURLSecret = test.mockNewSecret
+			defer func() { newSignedURLSecret = crypt.NewSignedURLSecret }()
+		}
+
+		err := test.inputConfig.Validate()
+		if test.expectedError != "" {
+			require.NotNil(t, err)
+			require.Contains(t, err.Error(), test.expectedError)
+			continue
+		}
+		require.Nil(t, err)
+		require.Equal(t, test.expectedTTL, test.inputConfig.TTL)
+		if test.expectedSecret != "" {
+			require.Equal(t, test.expectedSecret, test.inputConfig.Secret)
+		} else {
+			require.NotEmpty(t, test.inputConfig.Secret)
 		}
 	}
 }

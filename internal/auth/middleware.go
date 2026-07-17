@@ -32,20 +32,44 @@ func ContextWithIdentity(ctx context.Context, identity *Identity) context.Contex
 
 // BearerAuthenticator returns middleware which resolves Authorization header
 // into Identity stored in request context.
+// Identity already resolved by other authenticators is never overwritten.
 // It never rejects requests, authorization is done by Authorizer.
 func BearerAuthenticator(tokens []Token) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			presented := bearerFromHeader(r)
-			if presented != "" {
-				for _, token := range tokens {
-					if crypt.ValidateBearerToken(token.Hash, presented) {
-						r = r.WithContext(ContextWithIdentity(r.Context(), &Identity{
-							Name:   token.Name,
-							Scopes: token.Scopes,
-						}))
-						break
+			if IdentityFromContext(r.Context()) == nil {
+				if presented := bearerFromHeader(r); presented != "" {
+					for _, token := range tokens {
+						if crypt.ValidateBearerToken(token.Hash, presented) {
+							r = r.WithContext(ContextWithIdentity(r.Context(), &Identity{
+								Name:   token.Name,
+								Scopes: token.Scopes,
+							}))
+							break
+						}
 					}
+				}
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// SignedURLAuthenticator returns middleware which resolves valid signed URL
+// (e and s query parameters) into Identity.
+// Identity scope is derived from the signed path, so valid signature authorizes
+// exactly the URL which was signed and nothing else.
+// It never rejects requests, authorization is done by Authorizer.
+func SignedURLAuthenticator(secret string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if IdentityFromContext(r.Context()) == nil {
+				query := r.URL.Query()
+				if crypt.ValidateSignedURL(secret, r.URL.Path, query.Get("e"), query.Get("s")) {
+					r = r.WithContext(ContextWithIdentity(r.Context(), &Identity{
+						Name:   "signed-url",
+						Scopes: []string{strings.Join(pathSegments(r.URL.Path), ":")},
+					}))
 				}
 			}
 			next.ServeHTTP(w, r)
@@ -70,7 +94,6 @@ func Authorizer(anonymousScopes []string) func(http.Handler) http.Handler {
 				return
 			}
 
-			// Same 401 for missing and insufficient token, so endpoints cant be probed.
 			w.Header().Set("WWW-Authenticate", `Bearer realm="dmh"`)
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
 			w.WriteHeader(http.StatusUnauthorized)
