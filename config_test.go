@@ -669,6 +669,7 @@ func TestGetAuthConfig(t *testing.T) {
 						{Name: "alive-cron", Hash: "4c5dc9b7708905f77f5e5d16316b5dfb425e68cb326dcd55a860e90a7707031e", Scopes: []string{"api:alive"}},
 					},
 				},
+				SignedURL: auth.SignedURLConfig{TTL: 24},
 			},
 		},
 		{
@@ -694,6 +695,9 @@ func TestGetAuthConfig(t *testing.T) {
 			})
 		} else {
 			config := getAuthConfig(k)
+			// Signed URL secret is random generated (covered by auth package tests),
+			// drop it to compare rest of the config.
+			config.SignedURL.Secret = ""
 			require.Equal(t, test.expectedConfig, config)
 		}
 	}
