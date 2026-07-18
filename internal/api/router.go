@@ -17,6 +17,7 @@ func NewRouter(opts *Options) *chi.Mux {
 		r.Use(middleware.Recoverer)
 		if opts.Auth.Enabled {
 			r.Use(auth.BearerAuthenticator(opts.Auth.Bearer.Tokens))
+			r.Use(auth.SignedURLAuthenticator(opts.Auth.SignedURL.Secret))
 			r.Use(auth.Authorizer(opts.Auth.AnonymousScopes))
 		}
 		r.Get("/ready", healthHandler())

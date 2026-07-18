@@ -62,6 +62,8 @@ func main() {
 		log.Printf("remote_vault.url uses plain http://, action encryption keys will be sent over network UNENCRYPTED. THIS IS NOT RECOMMENDED FOR SECURITY REASONS!")
 	}
 
+	authConfig := getAuthConfig(k)
+
 	var s state.StateInterface
 	var v vault.VaultInterface
 	var e execute.ExecuteInterface
@@ -82,8 +84,10 @@ func main() {
 		mailConf := getMailConfig(k)
 
 		e, err = executeNew(&execute.Options{
-			BulkSMSConf: bulkSMSConf,
-			MailConf:    mailConf,
+			BulkSMSConf:     bulkSMSConf,
+			MailConf:        mailConf,
+			SignedURLSecret: authConfig.SignedURL.Secret,
+			SignedURLTTL:    authConfig.SignedURL.TTL,
 		})
 		if err != nil {
 			log.Panicf("unable to create execute: %s", err)
@@ -112,7 +116,7 @@ func main() {
 		State:           s,
 		Vault:           v,
 		Execute:         e,
-		Auth:            getAuthConfig(k),
+		Auth:            authConfig,
 		VaultURL:        k.String("remote_vault.url"),
 		VaultClientUUID: k.String("remote_vault.client_uuid"),
 		VaultToken:      k.String("remote_vault.token"),

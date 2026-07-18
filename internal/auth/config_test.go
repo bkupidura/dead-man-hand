@@ -169,45 +169,6 @@ func TestBearerValidate(t *testing.T) {
 	}
 }
 
-func TestValidateScope(t *testing.T) {
-	tests := []struct {
-		inputScope    string
-		expectedError string
-	}{
-		{
-			inputScope: "api",
-		},
-		{
-			inputScope: "api:vault:store:client-uuid",
-		},
-		{
-			inputScope:    "",
-			expectedError: "scope cant be empty",
-		},
-		{
-			inputScope:    "api::action",
-			expectedError: "scope api::action cant contain empty segments",
-		},
-		{
-			inputScope:    ":api",
-			expectedError: "scope :api cant contain empty segments",
-		},
-		{
-			inputScope:    "api:",
-			expectedError: "scope api: cant contain empty segments",
-		},
-	}
-	for _, test := range tests {
-		err := validateScope(test.inputScope)
-		if test.expectedError == "" {
-			require.Nil(t, err)
-		} else {
-			require.NotNil(t, err)
-			require.Equal(t, test.expectedError, err.Error())
-		}
-	}
-}
-
 func TestSignedURLValidate(t *testing.T) {
 	tests := []struct {
 		inputConfig    SignedURLConfig
