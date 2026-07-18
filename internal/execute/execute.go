@@ -3,13 +3,23 @@ package execute
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
+	"strings"
+	"time"
 
+	"dmh/internal/crypt"
 	"dmh/internal/state"
 )
+
+// sigAuthPlaceholder matches {sig_auth:<page>} in action data, which is
+// expanded on execution into freshly signed url /<page> path with
+// e and s query parameters attached.
+var sigAuthPlaceholder = regexp.MustCompile(`\{sig_auth:([a-z0-9_-]+)\}`)
 
 var (
 	// mocks for tests
 	jsonMarshal = json.Marshal
+	timeNow     = time.Now
 )
 
 // ExecuteData describes interface for every execute plugin.
@@ -26,15 +36,19 @@ type ExecuteInterface interface {
 
 // Execute stores internal data.
 type Execute struct {
-	bulkSMSConf BulkSMSConfig
-	mailConf    MailConfig
+	bulkSMSConf     BulkSMSConfig
+	mailConf        MailConfig
+	signedURLSecret string
+	signedURLTTL    int
 }
 
 // New returns new instance of Execute.
 func New(opts *Options) (ExecuteInterface, error) {
 	e := &Execute{
-		bulkSMSConf: opts.BulkSMSConf,
-		mailConf:    opts.MailConf,
+		bulkSMSConf:     opts.BulkSMSConf,
+		mailConf:        opts.MailConf,
+		signedURLSecret: opts.SignedURLSecret,
+		signedURLTTL:    opts.SignedURLTTL,
 	}
 
 	return e, nil
@@ -42,6 +56,7 @@ func New(opts *Options) (ExecuteInterface, error) {
 
 // Run will execute Action).
 func (e *Execute) Run(a *state.Action) error {
+	e.expandSigAuth(a)
 	data, err := UnmarshalActionData(a)
 	if err != nil {
 		return err
@@ -50,6 +65,21 @@ func (e *Execute) Run(a *state.Action) error {
 		return err
 	}
 	return data.Run()
+}
+
+// expandSigAuth replaces sigAuthPlaceholder occurrences in action data with
+// freshly signed /<page> path.
+// When auth disabled, placeholder is expanded to plain page path.
+func (e *Execute) expandSigAuth(a *state.Action) {
+	a.Data = sigAuthPlaceholder.ReplaceAllStringFunc(a.Data, func(placeholder string) string {
+		path := "/" + sigAuthPlaceholder.FindStringSubmatch(placeholder)[1]
+		sigAuth := path
+		if e.signedURLSecret != "" {
+			expiresAt := timeNow().Add(time.Duration(e.signedURLTTL) * time.Hour)
+			sigAuth = crypt.SignURL(e.signedURLSecret, path, expiresAt)
+		}
+		return strings.TrimPrefix(sigAuth, "/")
+	})
 }
 
 // UnmarshalActionData will unmarshal Action.Data into valid plugin which can be executed.

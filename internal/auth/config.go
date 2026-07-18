@@ -127,16 +127,3 @@ func (b *BearerConfig) Validate() error {
 	}
 	return nil
 }
-
-// validateScope checks single scope format.
-func validateScope(scope string) error {
-	if scope == "" {
-		return fmt.Errorf("scope cant be empty")
-	}
-	for _, segment := range strings.Split(scope, ":") {
-		if segment == "" {
-			return fmt.Errorf("scope %s cant contain empty segments", scope)
-		}
-	}
-	return nil
-}

@@ -68,7 +68,7 @@ func SignedURLAuthenticator(secret string) func(http.Handler) http.Handler {
 				if crypt.ValidateSignedURL(secret, r.URL.Path, query.Get("e"), query.Get("s")) {
 					r = r.WithContext(ContextWithIdentity(r.Context(), &Identity{
 						Name:   "signed-url",
-						Scopes: []string{strings.Join(pathSegments(r.URL.Path), ":")},
+						Scopes: []string{pathScope(r.URL.Path)},
 					}))
 				}
 			}

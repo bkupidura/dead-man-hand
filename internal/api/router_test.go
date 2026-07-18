@@ -4,8 +4,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"dmh/internal/auth"
+	"dmh/internal/crypt"
 	"dmh/internal/state"
 	"dmh/internal/vault"
 
@@ -24,16 +26,21 @@ func testAuthConfig(scopes []string, anonymousScopes []string) auth.Config {
 				{Name: "test2", Hash: "4c5dc9b7708905f77f5e5d16316b5dfb425e68cb326dcd55a860e90a7707031e", Scopes: []string{"api:vault"}},
 			},
 		},
+		SignedURL: auth.SignedURLConfig{
+			Secret: "test-secret",
+			TTL:    24,
+		},
 	}
 }
 
 func TestNewRouter(t *testing.T) {
 	tests := []struct {
-		inputOptions  func() *Options
-		method        string
-		path          string
-		authorization string
-		statusCode    int
+		inputOptions         func() *Options
+		method               string
+		path                 string
+		authorization        string
+		statusCode           int
+		expectedBodyContains string
 	}{
 		{
 			inputOptions: func() *Options {
@@ -417,6 +424,52 @@ func TestNewRouter(t *testing.T) {
 			authorization: "Bearer test-token",
 			statusCode:    http.StatusUnauthorized,
 		},
+		{
+			inputOptions: func() *Options {
+				s := new(mockState)
+				return &Options{State: s, DMHEnabled: true, Auth: testAuthConfig([]string{"api"}, nil)}
+			},
+			method:     "GET",
+			path:       "/alive",
+			statusCode: http.StatusUnauthorized,
+		},
+		{
+			inputOptions: func() *Options {
+				s := new(mockState)
+				return &Options{State: s, DMHEnabled: true, Auth: testAuthConfig([]string{"api"}, nil)}
+			},
+			method:               "GET",
+			path:                 crypt.SignURL("test-secret", "/alive", time.Now().Add(time.Hour)),
+			statusCode:           http.StatusOK,
+			expectedBodyContains: `<button id="alive">`,
+		},
+		{
+			inputOptions: func() *Options {
+				s := new(mockState)
+				return &Options{State: s, DMHEnabled: true, Auth: testAuthConfig([]string{"api"}, nil)}
+			},
+			method:     "POST",
+			path:       crypt.SignURL("test-secret", "/alive", time.Now().Add(time.Hour)),
+			statusCode: http.StatusInternalServerError,
+		},
+		{
+			inputOptions: func() *Options {
+				s := new(mockState)
+				return &Options{State: s, DMHEnabled: true, Auth: testAuthConfig([]string{"api"}, nil)}
+			},
+			method:     "GET",
+			path:       crypt.SignURL("wrong-secret", "/alive", time.Now().Add(time.Hour)),
+			statusCode: http.StatusUnauthorized,
+		},
+		{
+			inputOptions: func() *Options {
+				s := new(mockState)
+				return &Options{State: s, DMHEnabled: true, Auth: testAuthConfig([]string{"api"}, nil)}
+			},
+			method:     "GET",
+			path:       "/api/action/store" + crypt.SignURL("test-secret", "/alive", time.Now().Add(time.Hour))[len("/alive"):],
+			statusCode: http.StatusUnauthorized,
+		},
 	}
 
 	for _, test := range tests {
@@ -432,5 +485,8 @@ func TestNewRouter(t *testing.T) {
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, test.statusCode, w.Code)
+		if test.expectedBodyContains != "" {
+			require.Contains(t, w.Body.String(), test.expectedBodyContains)
+		}
 	}
 }

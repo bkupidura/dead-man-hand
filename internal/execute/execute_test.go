@@ -3,7 +3,9 @@ package execute
 import (
 	"fmt"
 	"testing"
+	"time"
 
+	"dmh/internal/crypt"
 	"dmh/internal/state"
 
 	"github.com/stretchr/testify/require"
@@ -49,12 +51,65 @@ func TestNew(t *testing.T) {
 				}
 			},
 		},
+		{
+			inputOptions: &Options{
+				SignedURLSecret: "test-secret",
+				SignedURLTTL:    24,
+			},
+			expectedExecute: func() ExecuteInterface {
+				return &Execute{
+					signedURLSecret: "test-secret",
+					signedURLTTL:    24,
+				}
+			},
+		},
 	}
 	for _, test := range tests {
 		e, err := New(test.inputOptions)
 		require.Equal(t, test.expectedError, err)
 		expectedE := test.expectedExecute()
 		require.Equal(t, expectedE, e)
+	}
+}
+
+func TestExpandSigAuth(t *testing.T) {
+	tests := []struct {
+		inputExecute *Execute
+		inputAction  *state.Action
+		expectedData string
+	}{
+		{
+			inputExecute: &Execute{signedURLSecret: "test-secret", signedURLTTL: 24},
+			inputAction:  &state.Action{Kind: "mail", Data: `{"message": "visit https://dmh.example.com/{sig_auth:alive}"}`},
+			expectedData: `{"message": "visit https://dmh.example.com` + crypt.SignURL("test-secret", "/alive", time.Unix(1700000000, 0).Add(24*time.Hour)) + `"}`,
+		},
+		{
+			inputExecute: &Execute{signedURLSecret: "test-secret", signedURLTTL: 24},
+			inputAction:  &state.Action{Kind: "mail", Data: `{"message": "no placeholder"}`},
+			expectedData: `{"message": "no placeholder"}`,
+		},
+		{
+			inputExecute: &Execute{signedURLSecret: "test-secret", signedURLTTL: 24},
+			inputAction:  &state.Action{Kind: "mail", Data: `{"message": "/{sig_auth:alive} and /{sig_auth:alive}"}`},
+			expectedData: `{"message": "` + crypt.SignURL("test-secret", "/alive", time.Unix(1700000000, 0).Add(24*time.Hour)) + ` and ` + crypt.SignURL("test-secret", "/alive", time.Unix(1700000000, 0).Add(24*time.Hour)) + `"}`,
+		},
+		{
+			inputExecute: &Execute{},
+			inputAction:  &state.Action{Kind: "mail", Data: `{"message": "visit https://dmh.example.com/{sig_auth:alive}"}`},
+			expectedData: `{"message": "visit https://dmh.example.com/alive"}`,
+		},
+		{
+			inputExecute: &Execute{signedURLSecret: "test-secret", signedURLTTL: 24},
+			inputAction:  &state.Action{Kind: "mail", Data: `{"message": "visit https://dmh.example.com/{sig_auth:unknown}"}`},
+			expectedData: `{"message": "visit https://dmh.example.com` + crypt.SignURL("test-secret", "/unknown", time.Unix(1700000000, 0).Add(24*time.Hour)) + `"}`,
+		},
+	}
+	for _, test := range tests {
+		timeNow = func() time.Time { return time.Unix(1700000000, 0) }
+		defer func() { timeNow = time.Now }()
+
+		test.inputExecute.expandSigAuth(test.inputAction)
+		require.Equal(t, test.expectedData, test.inputAction.Data)
 	}
 }
 

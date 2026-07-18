@@ -19,5 +19,5 @@ func TestAliveWebHandler(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Equal(t, "text/html; charset=utf-8", w.Header().Get("Content-Type"))
 	require.Contains(t, w.Body.String(), `<button id="alive">`)
-	require.Contains(t, w.Body.String(), `fetch("/alive", {method: "POST"})`)
+	require.Contains(t, w.Body.String(), `fetch(window.location.pathname + window.location.search, {method: "POST"})`)
 }
