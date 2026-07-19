@@ -209,6 +209,58 @@ func TestAuthorizer(t *testing.T) {
 	}
 }
 
+func TestIdentityCovers(t *testing.T) {
+	tests := []struct {
+		inputIdentity  *Identity
+		inputPath      string
+		expectedCovers bool
+	}{
+		{
+			// No identity covers nothing.
+			inputPath:      "/api/action/store",
+			expectedCovers: false,
+		},
+		{
+			inputIdentity:  &Identity{Name: "admin", Scopes: []string{"api"}},
+			inputPath:      "/api/action/store",
+			expectedCovers: true,
+		},
+		{
+			inputIdentity:  &Identity{Name: "admin", Scopes: []string{"api"}},
+			inputPath:      "/alive",
+			expectedCovers: false,
+		},
+		{
+			inputIdentity:  &Identity{Name: "alive-cron", Scopes: []string{"alive"}},
+			inputPath:      "/alive",
+			expectedCovers: true,
+		},
+		{
+			// Any of the identity scopes covering is enough.
+			inputIdentity:  &Identity{Name: "multi", Scopes: []string{"metrics", "alive"}},
+			inputPath:      "/alive",
+			expectedCovers: true,
+		},
+		{
+			inputIdentity:  &Identity{Name: "dmh", Scopes: []string{"api:vault:store:uuid-A"}},
+			inputPath:      "/api/vault/store/uuid-A/deeper",
+			expectedCovers: true,
+		},
+		{
+			inputIdentity:  &Identity{Name: "empty", Scopes: []string{}},
+			inputPath:      "/alive",
+			expectedCovers: false,
+		},
+	}
+	for _, test := range tests {
+		req := httptest.NewRequest("GET", test.inputPath, nil)
+		if test.inputIdentity != nil {
+			req = req.WithContext(ContextWithIdentity(req.Context(), test.inputIdentity))
+		}
+		require.Equal(t, test.expectedCovers, IdentityCovers(req, test.inputPath), "path %s identity %+v", test.inputPath, test.inputIdentity)
+	}
+}
+
 func TestMiddlewareChain(t *testing.T) {
 	token, err := crypt.NewBearerToken()
 	require.Nil(t, err)

@@ -470,6 +470,25 @@ func TestNewRouter(t *testing.T) {
 			path:       "/api/action/store" + crypt.SignURL("test-secret", "/alive", time.Now().Add(time.Hour))[len("/alive"):],
 			statusCode: http.StatusUnauthorized,
 		},
+		{
+			inputOptions: func() *Options {
+				s := new(mockState)
+				s.On("DeleteAction", "test").Return(nil)
+				return &Options{State: s, DMHEnabled: true, Auth: testAuthConfig([]string{"api"}, nil)}
+			},
+			method:     "DELETE",
+			path:       crypt.SignURL("test-secret", "/api/action/store/test", time.Now().Add(time.Hour)),
+			statusCode: http.StatusOK,
+		},
+		{
+			inputOptions: func() *Options {
+				s := new(mockState)
+				return &Options{State: s, DMHEnabled: true, Auth: testAuthConfig([]string{"api"}, nil)}
+			},
+			method:     "DELETE",
+			path:       "/api/action/store/other" + crypt.SignURL("test-secret", "/api/action/store/test", time.Now().Add(time.Hour))[len("/api/action/store/test"):],
+			statusCode: http.StatusUnauthorized,
+		},
 	}
 
 	for _, test := range tests {

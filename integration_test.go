@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"dmh/internal/api"
+	"dmh/internal/crypt"
 	"dmh/internal/metric"
 	"dmh/internal/state"
 
@@ -27,8 +28,9 @@ import (
 
 // Token hashes are used in test configs.
 const (
-	userBearerToken  = "example-bearer-token"
-	vaultBearerToken = "test-token"
+	userBearerToken    = "example-bearer-token"
+	vaultBearerToken   = "test-token"
+	sigAuthBearerToken = "sig-auth-test-token"
 )
 
 // authRequest sends HTTP request with bearer token.
@@ -112,6 +114,13 @@ func TestDMH(t *testing.T) {
             hash: 4c5dc9b7708905f77f5e5d16316b5dfb425e68cb326dcd55a860e90a7707031e
             scope:
               - api:vault
+          - name: sig-auth-test
+            hash: 91d8f5e25c6eca5e85822c8860e886773162fb982946b59f0400e8a26e66e7a2
+            scope:
+              - api:action
+              - alive
+      signed_url:
+        secret: integration-test-signed-url-secret
     vault:
       key: AGE-SECRET-KEY-1GEUMZFAZD42WGZFGATTTJHV4SURK8LU507QVCAKXKJP6UTFMJTCS0E3QJ4
       file: %s
@@ -151,6 +160,7 @@ func TestDMH(t *testing.T) {
 		"/action/fail":           0,
 		"/action/never_executed": 0,
 		"/action/missing_key":    0,
+		"/action/sig_auth":       0,
 	}
 	// Lets start fake server which can be used by Actions.
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -176,6 +186,8 @@ func TestDMH(t *testing.T) {
 			require.Equal(t, `{"key1":"value1","key2":"action/min_interval"}`, string(body))
 			require.Equal(t, "test1", r.Header.Get("header3"))
 			require.Equal(t, "test2", r.Header.Get("header4"))
+		} else if r.URL.RequestURI() == "/action/sig_auth" {
+			require.Regexp(t, `^\{"link":"https://dmh\.example\.com/alive\?e=[0-9a-z]+\\u0026s=[A-Za-z0-9_-]+"\}$`, string(body))
 		} else if r.URL.RequestURI() == "/action/fail" {
 			require.Equal(t, `{"key1":"fail"}`, string(body))
 			w.WriteHeader(http.StatusInternalServerError)
@@ -268,6 +280,52 @@ func TestDMH(t *testing.T) {
 	require.Nil(t, err)
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	// Lets test /api/action/test with a dummy action.
+	action = &state.Action{
+		Kind:         "dummy",
+		ProcessAfter: 10,
+		Data:         `{"message":"integration test dummy action"}`,
+	}
+
+	actionJson, err = json.Marshal(action)
+	require.Nil(t, err)
+
+	resp, err = authRequest("POST", "http://127.0.0.1:8080/api/action/test", userBearerToken, actionJson)
+	require.Nil(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	// Lets test that {sig_auth:alive} is rendered into a real signed link when the
+	// creating token scope covers /alive.
+	action = &state.Action{
+		Kind:         "json_post",
+		ProcessAfter: 10,
+		Data:         `{"url":"http://127.0.0.1:9090/action/sig_auth","data":{"link":"https://dmh.example.com/{sig_auth:alive}"},"success_code":[200]}`,
+	}
+
+	actionJson, err = json.Marshal(action)
+	require.Nil(t, err)
+
+	resp, err = authRequest("POST", "http://127.0.0.1:8080/api/action/test", sigAuthBearerToken, actionJson)
+	require.Nil(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	// Lets test that {sig_auth:metrics} is rejected, sig-auth-test token does not cover /metrics.
+	action = &state.Action{
+		Kind:         "json_post",
+		ProcessAfter: 10,
+		Data:         `{"url":"http://127.0.0.1:9090/action/sig_auth","data":{"link":"https://dmh.example.com/{sig_auth:metrics}"},"success_code":[200]}`,
+	}
+
+	actionJson, err = json.Marshal(action)
+	require.Nil(t, err)
+
+	resp, err = authRequest("POST", "http://127.0.0.1:8080/api/action/test", sigAuthBearerToken, actionJson)
+	require.Nil(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusForbidden, resp.StatusCode)
 
 	// Lets add new Action
 	action = &state.Action{
@@ -473,7 +531,7 @@ func TestDMH(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, resp.StatusCode)
 
 	// Lets ensure that all fakeServer endpoints were visited
-	require.Equal(t, 8, len(hitEndpoint))
+	require.Equal(t, 9, len(hitEndpoint))
 	for k, v := range map[string]int{
 		"/alive":                 2,
 		"/test":                  1,
@@ -482,6 +540,7 @@ func TestDMH(t *testing.T) {
 		"/action/min_interval":   2,
 		"/action/never_executed": 0,
 		"/action/missing_key":    0,
+		"/action/sig_auth":       1,
 	} {
 		require.Equal(t, v, hitEndpoint[k])
 	}
@@ -537,9 +596,52 @@ func TestDMH(t *testing.T) {
 	require.Contains(t, string(body), `dmh_actions{processed="2"} 3`)
 	require.Contains(t, string(body), `dmh_action_errors_total{action="bf577b9d-26f4-4168-b8e4-0e1d692559ed",error="DecryptAction"} 10`)
 	require.Regexp(t, `dmh_action_errors_total{action="[a-f0-9-]+",error="Run"} [0-9]+`, string(body))
+
+	// Human /alive page requires a credential when auth is enabled.
+	resp, err = http.Get("http://127.0.0.1:8080/alive")
+	require.Nil(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+
+	// Bearer token without "alive" scope (user only has api:action, api:alive) is not enough.
+	resp, err = authRequest("GET", "http://127.0.0.1:8080/alive", userBearerToken, nil)
+	require.Nil(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+
+	// Signed URL grants access to exactly /alive without any bearer token.
+	signedAliveURL := "http://127.0.0.1:8080" + crypt.SignURL("integration-test-signed-url-secret", "/alive", time.Now().Add(time.Hour))
+	resp, err = http.Get(signedAliveURL)
+	require.Nil(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	body, err = io.ReadAll(resp.Body)
+	require.Nil(t, err)
+	require.Contains(t, string(body), `<button id="alive">`)
+
+	// POST on the same signed URL confirms aliveness end-to-end, through the in-process vault.
+	resp, err = http.Post(signedAliveURL, "", nil)
+	require.Nil(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	// Signature signed with a different secret does not authorize.
+	wrongSecretURL := "http://127.0.0.1:8080" + crypt.SignURL("wrong-secret", "/alive", time.Now().Add(time.Hour))
+	resp, err = http.Get(wrongSecretURL)
+	require.Nil(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+
+	// Expired signature does not authorize.
+	expiredURL := "http://127.0.0.1:8080" + crypt.SignURL("integration-test-signed-url-secret", "/alive", time.Now().Add(-time.Hour))
+	resp, err = http.Get(expiredURL)
+	require.Nil(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 }
 
 func TestDMHAuthDisabled(t *testing.T) {
+	stateFile := "integration_test_auth_disabled_state.json"
 	vaultFile := "integration_test_auth_disabled_vault.json"
 	configFile := "integration_test_auth_disabled_config.yaml"
 
@@ -549,18 +651,25 @@ func TestDMHAuthDisabled(t *testing.T) {
 	defer f.Close()
 	_, err = f.WriteString(fmt.Sprintf(`
     components:
+      - dmh
       - vault
       - unknown
     auth:
       enabled: false
     action:
       process_unit: minute
+    state:
+      file: %s
+    remote_vault:
+      url: http://127.0.0.1:18081
+      client_uuid: auth-disabled-client
     vault:
       key: AGE-SECRET-KEY-1GEUMZFAZD42WGZFGATTTJHV4SURK8LU507QVCAKXKJP6UTFMJTCS0E3QJ4
       file: %s
-    `, vaultFile))
+    `, stateFile, vaultFile))
 	require.Nil(t, err)
 	defer os.Remove(vaultFile)
+	defer os.Remove(stateFile)
 
 	err = os.Setenv("DMH_CONFIG_FILE", configFile)
 	require.Nil(t, err)
@@ -596,6 +705,21 @@ func TestDMHAuthDisabled(t *testing.T) {
 	require.Nil(t, err)
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusNotFound, resp.StatusCode)
+
+	// Human /alive page is open without any credential when auth is disabled.
+	resp, err = http.Get("http://127.0.0.1:18081/alive")
+	require.Nil(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	body, err := io.ReadAll(resp.Body)
+	require.Nil(t, err)
+	require.Contains(t, string(body), `<button id="alive">`)
+
+	// POST confirms aliveness end-to-end, through the in-process vault, no credential needed.
+	resp, err = http.Post("http://127.0.0.1:18081/alive", "", nil)
+	require.Nil(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
 }
 
 func TestDMHAuthMissing(t *testing.T) {

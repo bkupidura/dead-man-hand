@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"time"
 
+	"dmh/internal/auth"
 	"dmh/internal/execute"
 	"dmh/internal/state"
 	"dmh/internal/vault"
@@ -70,6 +71,32 @@ func StatusErrLocked(err error) render.Renderer {
 		HTTPStatusCode: http.StatusLocked,
 		StatusText:     "Resource is locked.",
 	}
+}
+
+// StatusErrForbidden returns Forbidden.
+func StatusErrForbidden(err error) render.Renderer {
+	return &ErrResponse{
+		Err:            err,
+		HTTPStatusCode: http.StatusForbidden,
+		StatusText:     "Forbidden.",
+		ErrorText:      err.Error(),
+	}
+}
+
+// validateSigAuthScopes rejects action data whose {sig_auth:<page>} placeholders
+// reference a path the requester token scope does not cover, so a signed URL
+// cant delegate access the requester does not have. Anonymous scopes dont count.
+// Skipped when auth is disabled, nothing is signed then.
+func validateSigAuthScopes(r *http.Request, authConfig auth.Config, data string) error {
+	if !authConfig.Enabled {
+		return nil
+	}
+	for _, path := range execute.SigAuthPaths(data) {
+		if !auth.IdentityCovers(r, path) {
+			return fmt.Errorf("not allowed to sign %s", path)
+		}
+	}
+	return nil
 }
 
 // OKResponse is generic ok code struct.
@@ -154,12 +181,18 @@ func vaultAliveHandler(v vault.VaultInterface) func(http.ResponseWriter, *http.R
 }
 
 // testActionHandler allow to execute action for test.
-func testActionHandler(e execute.ExecuteInterface) func(http.ResponseWriter, *http.Request) {
+func testActionHandler(e execute.ExecuteInterface, authConfig auth.Config) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		request := &addTestActionRequest{}
 		if err := render.Bind(r, request); err != nil {
 			log.Printf("wrong request data provided: %s", err)
 			render.Render(w, r, StatusErrInvalidRequest(err))
+			return
+		}
+
+		if err := validateSigAuthScopes(r, authConfig, request.Data); err != nil {
+			log.Printf("sig_auth not allowed: %s", err)
+			render.Render(w, r, StatusErrForbidden(err))
 			return
 		}
 
@@ -214,12 +247,18 @@ func (req *addTestActionRequest) Bind(r *http.Request) error {
 }
 
 // addActionhandler adds new action to State.
-func addActionHandler(s state.StateInterface) func(http.ResponseWriter, *http.Request) {
+func addActionHandler(s state.StateInterface, authConfig auth.Config) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		request := &addTestActionRequest{}
 		if err := render.Bind(r, request); err != nil {
 			log.Printf("wrong request data provided: %s", err)
 			render.Render(w, r, StatusErrInvalidRequest(err))
+			return
+		}
+
+		if err := validateSigAuthScopes(r, authConfig, request.Data); err != nil {
+			log.Printf("sig_auth not allowed: %s", err)
+			render.Render(w, r, StatusErrForbidden(err))
 			return
 		}
 
