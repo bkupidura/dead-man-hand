@@ -74,7 +74,7 @@ func readConfig(configFile string) *koanf.Koanf {
 				log.Panicf("required config key %s cant be empty", configKey)
 			}
 		}
-		if _, err := crypt.New(k.String("vault.key")); err != nil {
+		if _, err := crypt.NewAge(k.String("vault.key")); err != nil {
 			log.Panicf("vault.key must be a valid age private key")
 		}
 	}

@@ -19,21 +19,21 @@ var (
 	ioCopy                    = io.Copy
 )
 
-// CryptInterface implement Crypt.
-type CryptInterface interface {
+// AgeInterface implement Age.
+type AgeInterface interface {
 	Encrypt(string) (string, error)
 	Decrypt(string) (string, error)
 	GetPrivateKey() string
 }
 
-// Crypt stores age encryption framework.
-type Crypt struct {
+// Age stores age encryption identity.
+type Age struct {
 	identity *age.X25519Identity
 }
 
-// New returns new instance of age.
+// NewAge returns new instance of Age.
 // If key is provided, instance will be created from key.
-func New(key string) (CryptInterface, error) {
+func NewAge(key string) (AgeInterface, error) {
 	var identity *age.X25519Identity
 	var err error
 	if key == "" {
@@ -45,7 +45,7 @@ func New(key string) (CryptInterface, error) {
 		return nil, err
 	}
 
-	return &Crypt{
+	return &Age{
 		identity: identity,
 	}, nil
 }
@@ -53,7 +53,7 @@ func New(key string) (CryptInterface, error) {
 // Encrypt encrypts input data.
 // Encrypt will return encrypted data and error.
 // Encrypted data is base64 decoded.
-func (c *Crypt) Encrypt(data string) (string, error) {
+func (c *Age) Encrypt(data string) (string, error) {
 	if data == "" {
 		return "", fmt.Errorf("empty data")
 	}
@@ -74,7 +74,7 @@ func (c *Crypt) Encrypt(data string) (string, error) {
 // Decrypt decrypts input data.
 // Decrypt will return plain text data and error.
 // Decrypt expect that input data is base64 encoded.
-func (c *Crypt) Decrypt(data string) (string, error) {
+func (c *Age) Decrypt(data string) (string, error) {
 	if data == "" {
 		return "", fmt.Errorf("empty data")
 	}
@@ -96,6 +96,6 @@ func (c *Crypt) Decrypt(data string) (string, error) {
 }
 
 // GetPrivateKey returns age private key.
-func (c *Crypt) GetPrivateKey() string {
+func (c *Age) GetPrivateKey() string {
 	return c.identity.String()
 }

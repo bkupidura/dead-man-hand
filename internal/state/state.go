@@ -22,7 +22,7 @@ import (
 
 var (
 	// mocks for tests
-	cryptNew    = crypt.New
+	cryptNewAge = crypt.NewAge
 	atomicWrite = func(path string, data []byte, perm os.FileMode) error {
 		return renameio.WriteFile(path, data, perm)
 	}
@@ -209,7 +209,7 @@ func (s *State) AddAction(a *Action) error {
 		return err
 	}
 
-	c, err := cryptNew("")
+	c, err := cryptNewAge("")
 	if err != nil {
 		return err
 	}
@@ -388,7 +388,7 @@ func (s *State) DecryptAction(u string) (*Action, error) {
 		return nil, err
 	}
 
-	c, err := cryptNew(vaultSecret.Key)
+	c, err := cryptNewAge(vaultSecret.Key)
 	if err != nil {
 		return nil, err
 	}

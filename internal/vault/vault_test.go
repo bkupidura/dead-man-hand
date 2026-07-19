@@ -196,7 +196,7 @@ func TestGetSecret(t *testing.T) {
 		inputClientUUID string
 		inputSecretUUID string
 		expectedSecret  *Secret
-		mockCryptNew    func(string) (crypt.CryptInterface, error)
+		mockCryptNewAge func(string) (crypt.AgeInterface, error)
 		expectedError   error
 	}{
 		{
@@ -395,10 +395,10 @@ func TestGetSecret(t *testing.T) {
 			},
 			inputClientUUID: "testClientUUID",
 			inputSecretUUID: "testSecretUUID",
-			mockCryptNew: func(string) (crypt.CryptInterface, error) {
-				return nil, fmt.Errorf("mockCryptNew error")
+			mockCryptNewAge: func(string) (crypt.AgeInterface, error) {
+				return nil, fmt.Errorf("mockCryptNewAge error")
 			},
-			expectedError: fmt.Errorf("mockCryptNew error"),
+			expectedError: fmt.Errorf("mockCryptNewAge error"),
 		},
 		{
 			inputVault: func() *Vault {
@@ -432,12 +432,12 @@ func TestGetSecret(t *testing.T) {
 			},
 			inputClientUUID: "testClientUUID",
 			inputSecretUUID: "testSecretUUID",
-			mockCryptNew: func(string) (crypt.CryptInterface, error) {
+			mockCryptNewAge: func(string) (crypt.AgeInterface, error) {
 				c := new(mockCrypt)
-				c.On("Decrypt", "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBnTTYreTRpQnFtU1lBcFZ6SVBaelBJMTdOMXRHdGswQ2dWb3ZiZ1daQWpRCmNQTWlZMFZpekV4WnVxUmRneEhLYmlOWitNa0FVZDBtMmlWUjRxL3NmSlkKLS0tIEdUdk13TTdwMEhYOVkrQ2IvSFk0UEFwYWRWVTlUQjhCYjhBSUdUWUdvWDgKTI1UILFd211V7M6mdgRZuVdsJYF8wNUL7KGZa3RYFzJWntY7").Return("", fmt.Errorf("mockCryptNew error"))
+				c.On("Decrypt", "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBnTTYreTRpQnFtU1lBcFZ6SVBaelBJMTdOMXRHdGswQ2dWb3ZiZ1daQWpRCmNQTWlZMFZpekV4WnVxUmRneEhLYmlOWitNa0FVZDBtMmlWUjRxL3NmSlkKLS0tIEdUdk13TTdwMEhYOVkrQ2IvSFk0UEFwYWRWVTlUQjhCYjhBSUdUWUdvWDgKTI1UILFd211V7M6mdgRZuVdsJYF8wNUL7KGZa3RYFzJWntY7").Return("", fmt.Errorf("mockCryptNewAge error"))
 				return c, nil
 			},
-			expectedError: fmt.Errorf("mockCryptNew error"),
+			expectedError: fmt.Errorf("mockCryptNewAge error"),
 		},
 		{
 			inputVault: func() *Vault {
@@ -522,11 +522,11 @@ func TestGetSecret(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		cryptNew = crypt.New
-		if test.mockCryptNew != nil {
-			cryptNew = test.mockCryptNew
+		cryptNewAge = crypt.NewAge
+		if test.mockCryptNewAge != nil {
+			cryptNewAge = test.mockCryptNewAge
 			defer func() {
-				cryptNew = crypt.New
+				cryptNewAge = crypt.NewAge
 			}()
 		}
 		v := test.inputVault()
@@ -543,7 +543,7 @@ func TestAddSecret(t *testing.T) {
 		inputSecretUUID string
 		inputSecret     *Secret
 		expectedSecret  *Secret
-		mockCryptNew    func(string) (crypt.CryptInterface, error)
+		mockCryptNewAge func(string) (crypt.AgeInterface, error)
 		expectedError   error
 	}{
 		{
@@ -622,10 +622,10 @@ func TestAddSecret(t *testing.T) {
 				Key:          "test2",
 				ProcessAfter: 10,
 			},
-			mockCryptNew: func(string) (crypt.CryptInterface, error) {
-				return nil, fmt.Errorf("mockCryptNew error")
+			mockCryptNewAge: func(string) (crypt.AgeInterface, error) {
+				return nil, fmt.Errorf("mockCryptNewAge error")
 			},
-			expectedError: fmt.Errorf("mockCryptNew error"),
+			expectedError: fmt.Errorf("mockCryptNewAge error"),
 		},
 		{
 			inputVault: func() *Vault {
@@ -664,12 +664,12 @@ func TestAddSecret(t *testing.T) {
 				Key:          "test2",
 				ProcessAfter: 10,
 			},
-			mockCryptNew: func(string) (crypt.CryptInterface, error) {
+			mockCryptNewAge: func(string) (crypt.AgeInterface, error) {
 				c := new(mockCrypt)
-				c.On("Encrypt", "test2").Return("", fmt.Errorf("mockCryptNew error"))
+				c.On("Encrypt", "test2").Return("", fmt.Errorf("mockCryptNewAge error"))
 				return c, nil
 			},
-			expectedError: fmt.Errorf("mockCryptNew error"),
+			expectedError: fmt.Errorf("mockCryptNewAge error"),
 		},
 		{
 			inputVault: func() *Vault {
@@ -719,11 +719,11 @@ func TestAddSecret(t *testing.T) {
 	os.Remove(vaultFile)
 	defer os.Remove(vaultFile)
 	for _, test := range tests {
-		cryptNew = crypt.New
-		if test.mockCryptNew != nil {
-			cryptNew = test.mockCryptNew
+		cryptNewAge = crypt.NewAge
+		if test.mockCryptNewAge != nil {
+			cryptNewAge = test.mockCryptNewAge
 			defer func() {
-				cryptNew = crypt.New
+				cryptNewAge = crypt.NewAge
 			}()
 		}
 		v := test.inputVault()
