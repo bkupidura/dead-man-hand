@@ -118,3 +118,12 @@ func TestValidateSignedURL(t *testing.T) {
 		require.Equal(t, test.expectedValid, valid, "url %s", test.inputURL)
 	}
 }
+
+func TestNewSignedURLSecretUnique(t *testing.T) {
+	first, err := NewSignedURLSecret()
+	require.NoError(t, err)
+	second, err := NewSignedURLSecret()
+	require.NoError(t, err)
+
+	require.NotEqual(t, first, second, "two generated secrets should be different")
+}

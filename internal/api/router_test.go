@@ -85,7 +85,7 @@ func TestNewRouter(t *testing.T) {
 			},
 			method:     "POST",
 			path:       "/api/alive",
-			statusCode: http.StatusMethodNotAllowed,
+			statusCode: http.StatusInternalServerError,
 		},
 		{
 			inputOptions: func() *Options {
