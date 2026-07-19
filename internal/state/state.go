@@ -20,16 +20,18 @@ import (
 	"github.com/google/uuid"
 )
 
+const httpClientTimeout = 15 * time.Second
+
 var (
 	// mocks for tests
-	cryptNew    = crypt.New
+	cryptNewAge = crypt.NewAge
 	atomicWrite = func(path string, data []byte, perm os.FileMode) error {
 		return renameio.WriteFile(path, data, perm)
 	}
 	osChmod     = os.Chmod
 	jsonMarshal = json.Marshal
 	// httpClient is used for the outbound http connections.
-	httpClient = &http.Client{Timeout: 30 * time.Second}
+	httpClient = &http.Client{Timeout: httpClientTimeout}
 )
 
 // Action stores user actions.
@@ -209,7 +211,7 @@ func (s *State) AddAction(a *Action) error {
 		return err
 	}
 
-	c, err := cryptNew("")
+	c, err := cryptNewAge("")
 	if err != nil {
 		return err
 	}
@@ -388,7 +390,7 @@ func (s *State) DecryptAction(u string) (*Action, error) {
 		return nil, err
 	}
 
-	c, err := cryptNew(vaultSecret.Key)
+	c, err := cryptNewAge(vaultSecret.Key)
 	if err != nil {
 		return nil, err
 	}

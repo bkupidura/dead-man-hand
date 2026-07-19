@@ -394,7 +394,7 @@ func TestAddAction(t *testing.T) {
 		inputState      func() *State
 		expectedError   bool
 		expectedActions []*EncryptedAction
-		mockCryptFunc   func(string) (crypt.CryptInterface, error)
+		mockCryptFunc   func(string) (crypt.AgeInterface, error)
 		mockJsonMarshal func(any) ([]byte, error)
 		fakeHTTPServer  func() *httptest.Server
 	}{
@@ -441,7 +441,7 @@ func TestAddAction(t *testing.T) {
 				}
 				return s
 			},
-			mockCryptFunc: func(string) (crypt.CryptInterface, error) {
+			mockCryptFunc: func(string) (crypt.AgeInterface, error) {
 				return nil, fmt.Errorf("mockCryptFunc error")
 			},
 			expectedError: true,
@@ -467,7 +467,7 @@ func TestAddAction(t *testing.T) {
 				}
 				return s
 			},
-			mockCryptFunc: func(string) (crypt.CryptInterface, error) {
+			mockCryptFunc: func(string) (crypt.AgeInterface, error) {
 				c := new(mockCrypt)
 				return c, nil
 			},
@@ -494,7 +494,7 @@ func TestAddAction(t *testing.T) {
 				}
 				return s
 			},
-			mockCryptFunc: func(string) (crypt.CryptInterface, error) {
+			mockCryptFunc: func(string) (crypt.AgeInterface, error) {
 				c := new(mockCrypt)
 				c.On("Encrypt", "test").Return("", fmt.Errorf("mockCrypt error"))
 				return c, nil
@@ -613,8 +613,8 @@ func TestAddAction(t *testing.T) {
 				}))
 				return s
 			},
-			mockCryptFunc: func(string) (crypt.CryptInterface, error) {
-				c, err := crypt.New("AGE-SECRET-KEY-1CUGTTN4UQCDCFQAY7QM8C4RM4KGE7LN47D5SUU9MQVHEPDPWR04Q5NN5D8")
+			mockCryptFunc: func(string) (crypt.AgeInterface, error) {
+				c, err := crypt.NewAge("AGE-SECRET-KEY-1CUGTTN4UQCDCFQAY7QM8C4RM4KGE7LN47D5SUU9MQVHEPDPWR04Q5NN5D8")
 				require.Nil(t, err)
 				return c, nil
 			},
@@ -698,8 +698,8 @@ func TestAddAction(t *testing.T) {
 				}))
 				return s
 			},
-			mockCryptFunc: func(string) (crypt.CryptInterface, error) {
-				c, err := crypt.New("")
+			mockCryptFunc: func(string) (crypt.AgeInterface, error) {
+				c, err := crypt.NewAge("")
 				require.Nil(t, err)
 				return c, nil
 			},
@@ -709,11 +709,11 @@ func TestAddAction(t *testing.T) {
 		os.Remove("test_state.json")
 		defer os.Remove("test_state.json")
 
-		cryptNew = crypt.New
+		cryptNewAge = crypt.NewAge
 		if test.mockCryptFunc != nil {
-			cryptNew = test.mockCryptFunc
+			cryptNewAge = test.mockCryptFunc
 			defer func() {
-				cryptNew = crypt.New
+				cryptNewAge = crypt.NewAge
 			}()
 
 		}
@@ -1446,13 +1446,13 @@ func TestDecryptAction(t *testing.T) {
 		inputState      func() *State
 		expectedError   bool
 		expectedAction  *Action
-		mockCryptFunc   func(string) (crypt.CryptInterface, error)
+		mockCryptFunc   func(string) (crypt.AgeInterface, error)
 		fakeHTTPServer  func() *httptest.Server
 	}{
 		{
 			inputActionUUID: "test",
 			inputState: func() *State {
-				c, err := crypt.New("AGE-SECRET-KEY-1CUGTTN4UQCDCFQAY7QM8C4RM4KGE7LN47D5SUU9MQVHEPDPWR04Q5NN5D8")
+				c, err := crypt.NewAge("AGE-SECRET-KEY-1CUGTTN4UQCDCFQAY7QM8C4RM4KGE7LN47D5SUU9MQVHEPDPWR04Q5NN5D8")
 				require.Nil(t, err)
 				encryptedData, err := c.Encrypt(`{"message":"test","destination":["a@a.com","b@com"],"subject":"test2"}`)
 				require.Nil(t, err)
@@ -1488,7 +1488,7 @@ func TestDecryptAction(t *testing.T) {
 		{
 			inputActionUUID: "action-random-uuid",
 			inputState: func() *State {
-				c, err := crypt.New("AGE-SECRET-KEY-1CUGTTN4UQCDCFQAY7QM8C4RM4KGE7LN47D5SUU9MQVHEPDPWR04Q5NN5D8")
+				c, err := crypt.NewAge("AGE-SECRET-KEY-1CUGTTN4UQCDCFQAY7QM8C4RM4KGE7LN47D5SUU9MQVHEPDPWR04Q5NN5D8")
 				require.Nil(t, err)
 				encryptedData, err := c.Encrypt(`{"message":"test","destination":["a@a.com","b@com"],"subject":"test2"}`)
 				require.Nil(t, err)
@@ -1524,7 +1524,7 @@ func TestDecryptAction(t *testing.T) {
 		{
 			inputActionUUID: "action-random-uuid",
 			inputState: func() *State {
-				c, err := crypt.New("AGE-SECRET-KEY-1CUGTTN4UQCDCFQAY7QM8C4RM4KGE7LN47D5SUU9MQVHEPDPWR04Q5NN5D8")
+				c, err := crypt.NewAge("AGE-SECRET-KEY-1CUGTTN4UQCDCFQAY7QM8C4RM4KGE7LN47D5SUU9MQVHEPDPWR04Q5NN5D8")
 				require.Nil(t, err)
 				encryptedData, err := c.Encrypt(`{"message":"test","destination":["a@a.com","b@com"],"subject":"test2"}`)
 				require.Nil(t, err)
@@ -1567,7 +1567,7 @@ func TestDecryptAction(t *testing.T) {
 		{
 			inputActionUUID: "action-random-uuid",
 			inputState: func() *State {
-				c, err := crypt.New("AGE-SECRET-KEY-1CUGTTN4UQCDCFQAY7QM8C4RM4KGE7LN47D5SUU9MQVHEPDPWR04Q5NN5D8")
+				c, err := crypt.NewAge("AGE-SECRET-KEY-1CUGTTN4UQCDCFQAY7QM8C4RM4KGE7LN47D5SUU9MQVHEPDPWR04Q5NN5D8")
 				require.Nil(t, err)
 				encryptedData, err := c.Encrypt(`{"message":"test","destination":["a@a.com","b@com"],"subject":"test2"}`)
 				require.Nil(t, err)
@@ -1611,7 +1611,7 @@ func TestDecryptAction(t *testing.T) {
 		{
 			inputActionUUID: "action-random-uuid",
 			inputState: func() *State {
-				c, err := crypt.New("AGE-SECRET-KEY-1CUGTTN4UQCDCFQAY7QM8C4RM4KGE7LN47D5SUU9MQVHEPDPWR04Q5NN5D8")
+				c, err := crypt.NewAge("AGE-SECRET-KEY-1CUGTTN4UQCDCFQAY7QM8C4RM4KGE7LN47D5SUU9MQVHEPDPWR04Q5NN5D8")
 				require.Nil(t, err)
 				encryptedData, err := c.Encrypt(`{"message":"test","destination":["a@a.com","b@com"],"subject":"test2"}`)
 				require.Nil(t, err)
@@ -1650,7 +1650,7 @@ func TestDecryptAction(t *testing.T) {
 				}))
 				return s
 			},
-			mockCryptFunc: func(string) (crypt.CryptInterface, error) {
+			mockCryptFunc: func(string) (crypt.AgeInterface, error) {
 				return nil, fmt.Errorf("mockCryptFunc error")
 			},
 			expectedError: true,
@@ -1658,7 +1658,7 @@ func TestDecryptAction(t *testing.T) {
 		{
 			inputActionUUID: "action-random-uuid",
 			inputState: func() *State {
-				c, err := crypt.New("AGE-SECRET-KEY-1CUGTTN4UQCDCFQAY7QM8C4RM4KGE7LN47D5SUU9MQVHEPDPWR04Q5NN5D8")
+				c, err := crypt.NewAge("AGE-SECRET-KEY-1CUGTTN4UQCDCFQAY7QM8C4RM4KGE7LN47D5SUU9MQVHEPDPWR04Q5NN5D8")
 				require.Nil(t, err)
 				encryptedData, err := c.Encrypt(`{"message":"test","destination":["a@a.com","b@com"],"subject":"test2"}`)
 				require.Nil(t, err)
@@ -1702,7 +1702,7 @@ func TestDecryptAction(t *testing.T) {
 		{
 			inputActionUUID: "action-random-uuid",
 			inputState: func() *State {
-				c, err := crypt.New("AGE-SECRET-KEY-1CUGTTN4UQCDCFQAY7QM8C4RM4KGE7LN47D5SUU9MQVHEPDPWR04Q5NN5D8")
+				c, err := crypt.NewAge("AGE-SECRET-KEY-1CUGTTN4UQCDCFQAY7QM8C4RM4KGE7LN47D5SUU9MQVHEPDPWR04Q5NN5D8")
 				require.Nil(t, err)
 				encryptedData, err := c.Encrypt(`{"message":"test","destination":["a@a.com","b@com"],"subject":"test2"}`)
 				require.Nil(t, err)
@@ -1755,11 +1755,11 @@ func TestDecryptAction(t *testing.T) {
 		os.Remove("test_state.json")
 		defer os.Remove("test_state.json")
 
-		cryptNew = crypt.New
+		cryptNewAge = crypt.NewAge
 		if test.mockCryptFunc != nil {
-			cryptNew = test.mockCryptFunc
+			cryptNewAge = test.mockCryptFunc
 			defer func() {
-				cryptNew = crypt.New
+				cryptNewAge = crypt.NewAge
 			}()
 
 		}

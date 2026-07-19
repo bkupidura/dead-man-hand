@@ -21,10 +21,10 @@ func (f *failCloseWriteCloser) Close() error {
 	return fmt.Errorf("mockClose error")
 }
 
-func TestNew(t *testing.T) {
+func TestNewAge(t *testing.T) {
 	tests := []struct {
 		inputKey                       string
-		expectedCryptType              CryptInterface
+		expectedAgeType                AgeInterface
 		expectedError                  error
 		mockAgeGenerateX255191Identity func() (*age.X25519Identity, error)
 	}{
@@ -38,12 +38,12 @@ func TestNew(t *testing.T) {
 			expectedError: fmt.Errorf("malformed secret key: separator '1' at invalid position: pos=-1, len=1"),
 		},
 		{
-			inputKey:          "",
-			expectedCryptType: &Crypt{},
+			inputKey:        "",
+			expectedAgeType: &Age{},
 		},
 		{
-			inputKey:          "AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0",
-			expectedCryptType: &Crypt{},
+			inputKey:        "AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0",
+			expectedAgeType: &Age{},
 		},
 	}
 	for _, test := range tests {
@@ -51,9 +51,9 @@ func TestNew(t *testing.T) {
 		if test.mockAgeGenerateX255191Identity != nil {
 			ageGenerateX25519Identity = test.mockAgeGenerateX255191Identity
 		}
-		c, err := New(test.inputKey)
+		c, err := NewAge(test.inputKey)
 		require.Equal(t, test.expectedError, err)
-		require.IsType(t, test.expectedCryptType, c)
+		require.IsType(t, test.expectedAgeType, c)
 		if test.expectedError == nil && test.inputKey != "" {
 			require.Equal(t, test.inputKey, c.GetPrivateKey())
 		}
@@ -137,7 +137,7 @@ func TestEncrypt(t *testing.T) {
 			ioWriteString = test.mockIoWriteString
 		}
 
-		c, err := New(test.inputKey)
+		c, err := NewAge(test.inputKey)
 		require.Nil(t, err)
 
 		out, err := c.Encrypt(test.inputData)
@@ -155,7 +155,7 @@ func TestEncrypt(t *testing.T) {
 }
 
 func TestEncryptDiffOutputSameInput(t *testing.T) {
-	c, err := New("")
+	c, err := NewAge("")
 	require.NoError(t, err)
 
 	enc1, err := c.Encrypt("same data")
@@ -236,7 +236,7 @@ func TestDecrypt(t *testing.T) {
 			ioCopy = test.mockIoCopy
 		}
 
-		c, err := New(test.inputKey)
+		c, err := NewAge(test.inputKey)
 		require.Nil(t, err)
 
 		out, err := c.Decrypt(test.inputData)
@@ -246,13 +246,13 @@ func TestDecrypt(t *testing.T) {
 }
 
 func TestDecryptionWithWrongKey(t *testing.T) {
-	c1, err := New("")
+	c1, err := NewAge("")
 	require.Nil(t, err)
 
 	encrypted, err := c1.Encrypt("test data")
 	require.Nil(t, err)
 
-	c2, err := New("")
+	c2, err := NewAge("")
 	require.Nil(t, err)
 
 	decrypted, err := c2.Decrypt(encrypted)
@@ -271,7 +271,7 @@ func TestRoundTrip(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		c, err := New("")
+		c, err := NewAge("")
 		require.Nil(t, err)
 
 		encrypted, err := c.Encrypt(test.data)
@@ -285,7 +285,7 @@ func TestRoundTrip(t *testing.T) {
 }
 
 func TestDecryptTamperedData(t *testing.T) {
-	c, err := New("")
+	c, err := NewAge("")
 	require.Nil(t, err)
 
 	original := "sensitive data"
@@ -303,20 +303,20 @@ func TestDecryptTamperedData(t *testing.T) {
 }
 
 func TestDiffKeys(t *testing.T) {
-	c1, err := New("")
+	c1, err := NewAge("")
 	require.Nil(t, err)
 
-	c2, err := New("")
+	c2, err := NewAge("")
 	require.Nil(t, err)
 
 	require.NotEqual(t, c1.GetPrivateKey(), c2.GetPrivateKey())
 }
 
 func TestSameKeys(t *testing.T) {
-	c1, err := New("AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0")
+	c1, err := NewAge("AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0")
 	require.Nil(t, err)
 
-	c2, err := New("AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0")
+	c2, err := NewAge("AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0")
 	require.Nil(t, err)
 
 	require.Equal(t, c1.GetPrivateKey(), c2.GetPrivateKey())

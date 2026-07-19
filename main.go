@@ -50,16 +50,16 @@ func main() {
 
 	for _, component := range enabledComponents {
 		if !slices.Contains([]string{"dmh", "vault"}, component) {
-			log.Printf("unknown component %s enabled, it will be IGNORED! Supported components: dmh, vault", component)
+			log.Printf("unknown component %s enabled, supported components: dmh, vault", component)
 		}
 	}
 
 	if slices.Contains(enabledComponents, "dmh") && slices.Contains(enabledComponents, "vault") {
-		log.Printf("dmh and vault component enabled. THIS IS NOT RECOMMENDED FOR SECURITY REASONS!")
+		log.Printf("dmh and vault component enabled, check https://github.com/bkupidura/dead-man-hand/wiki/Security#run-dmh-and-vault-on-different-servers--locations")
 	}
 
 	if slices.Contains(enabledComponents, "dmh") && strings.HasPrefix(strings.ToLower(k.String("remote_vault.url")), "http://") {
-		log.Printf("remote_vault.url uses plain http://, action encryption keys will be sent over network UNENCRYPTED. THIS IS NOT RECOMMENDED FOR SECURITY REASONS!")
+		log.Printf("remote_vault.url uses plain http, check https://github.com/bkupidura/dead-man-hand/wiki/Security#use-tls-for-every-connection-strongly-recommended")
 	}
 
 	authConfig := getAuthConfig(k)

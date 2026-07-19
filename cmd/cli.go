@@ -19,12 +19,14 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const httpClientTimeout = 15 * time.Second
+
 var (
 	// mocks for tests
 	newRequest  = http.NewRequest
 	jsonMarshal = json.Marshal
 	getClient   = func(cmd *cli.Command) *http.Client {
-		return &http.Client{Timeout: 5 * time.Second}
+		return &http.Client{Timeout: httpClientTimeout}
 	}
 	newBearerToken = crypt.NewBearerToken
 )

@@ -20,7 +20,7 @@ var (
 		return renameio.WriteFile(path, data, perm)
 	}
 	osChmod     = os.Chmod
-	cryptNew    = crypt.New
+	cryptNewAge = crypt.NewAge
 	jsonMarshal = json.Marshal
 )
 
@@ -132,7 +132,7 @@ func (v *Vault) GetSecret(clientUUID string, secretUUID string) (*Secret, error)
 		return nil, fmt.Errorf("secret %s/%s %w", clientUUID, secretUUID, ErrSecretNotReleased)
 	}
 
-	c, err := cryptNew(v.key)
+	c, err := cryptNewAge(v.key)
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +165,7 @@ func (v *Vault) AddSecret(clientUUID string, secretUUID string, secret *Secret) 
 		return fmt.Errorf("secret %s/%s already exists", clientUUID, secretUUID)
 	}
 
-	c, err := cryptNew(v.key)
+	c, err := cryptNewAge(v.key)
 	if err != nil {
 		return err
 	}

@@ -11,7 +11,6 @@ import (
 	"os"
 	"regexp"
 	"testing"
-	"time"
 
 	"dmh/internal/crypt"
 	"dmh/internal/state"
@@ -548,7 +547,7 @@ func TestCreateAction(t *testing.T) {
 func TestGetClient(t *testing.T) {
 	client := getClient(nil)
 	require.NotNil(t, client)
-	require.Equal(t, 5*time.Second, client.Timeout)
+	require.Equal(t, httpClientTimeout, client.Timeout)
 }
 
 func TestActionDataUnmarshalYAML(t *testing.T) {

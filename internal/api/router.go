@@ -8,6 +8,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
+// maxRequestBodyBytes caps request bodies accepted from clients.
+const maxRequestBodyBytes = 1 << 20 // 1 MiB
+
 // NewRouter creates http router.
 func NewRouter(opts *Options) *chi.Mux {
 	httpRouter := chi.NewRouter()
@@ -15,6 +18,7 @@ func NewRouter(opts *Options) *chi.Mux {
 	httpRouter.Group(func(r chi.Router) {
 		r.Use(middleware.CleanPath)
 		r.Use(middleware.Recoverer)
+		r.Use(middleware.RequestSize(maxRequestBodyBytes))
 		if opts.Auth.Enabled {
 			r.Use(auth.BearerAuthenticator(opts.Auth.Bearer.Tokens))
 			r.Use(auth.SignedURLAuthenticator(opts.Auth.SignedURL.Secret))

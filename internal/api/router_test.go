@@ -1,8 +1,10 @@
 package api
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -38,6 +40,7 @@ func TestNewRouter(t *testing.T) {
 		inputOptions         func() *Options
 		method               string
 		path                 string
+		body                 string
 		authorization        string
 		statusCode           int
 		expectedBodyContains string
@@ -489,12 +492,45 @@ func TestNewRouter(t *testing.T) {
 			path:       "/api/action/store/other" + crypt.SignURL("test-secret", "/api/action/store/test", time.Now().Add(time.Hour))[len("/api/action/store/test"):],
 			statusCode: http.StatusUnauthorized,
 		},
+		{
+			inputOptions: func() *Options {
+				return &Options{State: new(mockState), DMHEnabled: true}
+			},
+			method:     "POST",
+			path:       "/api/action/test",
+			body:       `{"kind": "dummy", "process_after": 10, "data": "` + strings.Repeat("a", maxRequestBodyBytes+1) + `"}`,
+			statusCode: http.StatusBadRequest,
+		},
+		{
+			inputOptions: func() *Options {
+				s := new(mockState)
+				s.On("GetActions").Return([]*state.EncryptedAction{})
+				return &Options{State: s, DMHEnabled: true}
+			},
+			method:     "POST",
+			path:       "/api/action/store",
+			body:       `{"kind": "dummy", "process_after": 10, "data": "` + strings.Repeat("a", maxRequestBodyBytes+1) + `"}`,
+			statusCode: http.StatusBadRequest,
+		},
+		{
+			inputOptions: func() *Options {
+				return &Options{Vault: new(mockVault), VaultEnabled: true}
+			},
+			method:     "POST",
+			path:       "/api/vault/store/client-uuid/secret-uuid",
+			body:       `{"key": "` + strings.Repeat("a", maxRequestBodyBytes+1) + `", "process_after": 10}`,
+			statusCode: http.StatusBadRequest,
+		},
 	}
 
 	for _, test := range tests {
 		router := NewRouter(test.inputOptions())
 
-		req, err := http.NewRequest(test.method, test.path, nil)
+		var reqBody io.Reader
+		if test.body != "" {
+			reqBody = strings.NewReader(test.body)
+		}
+		req, err := http.NewRequest(test.method, test.path, reqBody)
 		require.Nil(t, err)
 		if test.authorization != "" {
 			req.Header.Set("Authorization", test.authorization)
