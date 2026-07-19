@@ -93,7 +93,7 @@ func getAuthConfig(k *koanf.Koanf) auth.Config {
 		log.Panicf("invalid auth config: %s", err)
 	}
 	if !config.Enabled {
-		log.Printf("authentication is DISABLED, all API endpoints are open. THIS IS NOT RECOMMENDED FOR SECURITY REASONS!")
+		log.Printf("authentication is DISABLED, check https://github.com/bkupidura/dead-man-hand/wiki/Security#enable-authentication")
 	}
 	return config
 }

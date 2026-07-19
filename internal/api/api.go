@@ -17,9 +17,11 @@ import (
 	"github.com/go-chi/render"
 )
 
+const httpClientTimeout = 15 * time.Second
+
 var (
 	// httpClient is used for the outbound http connections.
-	httpClient = &http.Client{Timeout: 30 * time.Second}
+	httpClient = &http.Client{Timeout: httpClientTimeout}
 	// mocks for tests
 	newRequest = http.NewRequest
 )

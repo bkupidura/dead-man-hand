@@ -20,6 +20,8 @@ import (
 	"github.com/google/uuid"
 )
 
+const httpClientTimeout = 15 * time.Second
+
 var (
 	// mocks for tests
 	cryptNewAge = crypt.NewAge
@@ -29,7 +31,7 @@ var (
 	osChmod     = os.Chmod
 	jsonMarshal = json.Marshal
 	// httpClient is used for the outbound http connections.
-	httpClient = &http.Client{Timeout: 30 * time.Second}
+	httpClient = &http.Client{Timeout: httpClientTimeout}
 )
 
 // Action stores user actions.

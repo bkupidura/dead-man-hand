@@ -96,6 +96,25 @@ func TestJsonPostRun(t *testing.T) {
 				return s
 			},
 		},
+		{
+			inputPlugin: func(url string) *ExecuteJSONPost {
+				return &ExecuteJSONPost{
+					URL:         url + "/redirect",
+					Data:        map[string]any{"test": "test"},
+					SuccessCode: []int{http.StatusFound},
+				}
+			},
+			fakeHTTPServer: func() *httptest.Server {
+				mux := http.NewServeMux()
+				mux.HandleFunc("/redirect", func(w http.ResponseWriter, r *http.Request) {
+					http.Redirect(w, r, "/followed", http.StatusFound)
+				})
+				mux.HandleFunc("/followed", func(w http.ResponseWriter, r *http.Request) {
+					require.FailNow(t, "redirect target must not be requested")
+				})
+				return httptest.NewServer(mux)
+			},
+		},
 	}
 	for _, test := range tests {
 		jsonMarshal = json.Marshal
