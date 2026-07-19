@@ -35,11 +35,11 @@ func NewRouter(opts *Options) *chi.Mux {
 				r.Get("/", aliveHandler(opts.State, opts.VaultURL, opts.VaultClientUUID, opts.VaultToken))
 			})
 			r.Route("/api/action/test", func(r chi.Router) {
-				r.Post("/", testActionHandler(opts.Execute))
+				r.Post("/", testActionHandler(opts.Execute, opts.Auth))
 			})
 			r.Route("/api/action/store", func(r chi.Router) {
 				r.Get("/", listActionsHandler(opts.State))
-				r.Post("/", addActionHandler(opts.State))
+				r.Post("/", addActionHandler(opts.State, opts.Auth))
 				r.Route("/{actionUUID}", func(r chi.Router) {
 					r.Get("/", getActionHandler(opts.State))
 					r.Delete("/", deleteActionHandler(opts.State))

@@ -82,14 +82,7 @@ func SignedURLAuthenticator(secret string) func(http.Handler) http.Handler {
 func Authorizer(anonymousScopes []string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			path := pathSegments(r.URL.Path)
-
-			if anyScopeCovers(anonymousScopes, path) {
-				next.ServeHTTP(w, r)
-				return
-			}
-
-			if identity := IdentityFromContext(r.Context()); identity != nil && anyScopeCovers(identity.Scopes, path) {
+			if anyScopeCovers(anonymousScopes, pathSegments(r.URL.Path)) || IdentityCovers(r, r.URL.Path) {
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -100,6 +93,12 @@ func Authorizer(anonymousScopes []string) func(http.Handler) http.Handler {
 			w.Write([]byte(`{"status":"Unauthorized."}` + "\n"))
 		})
 	}
+}
+
+// IdentityCovers reports whether the request Identity scope covers urlPath.
+func IdentityCovers(r *http.Request, urlPath string) bool {
+	identity := IdentityFromContext(r.Context())
+	return identity != nil && anyScopeCovers(identity.Scopes, pathSegments(urlPath))
 }
 
 // bearerFromHeader extracts bearer token from Authorization header.

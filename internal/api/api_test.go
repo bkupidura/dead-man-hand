@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"dmh/internal/auth"
 	"dmh/internal/execute"
 	"dmh/internal/state"
 	"dmh/internal/vault"
@@ -270,6 +271,8 @@ func TestTestActionHandler(t *testing.T) {
 	tests := []struct {
 		payload         string
 		mockExecuteFunc func() execute.ExecuteInterface
+		inputAuthConfig auth.Config
+		inputIdentity   *auth.Identity
 		expectedCode    int
 	}{
 		{
@@ -298,17 +301,40 @@ func TestTestActionHandler(t *testing.T) {
 			},
 			expectedCode: http.StatusOK,
 		},
+		{
+			payload: `{"kind": "mail", "process_after": 10, "data": "{\"message\": \"/{sig_auth:alive}\", \"destination\": [\"a@b.com\"], \"subject\": \"hi\"}"}`,
+			mockExecuteFunc: func() execute.ExecuteInterface {
+				return new(mockExecute)
+			},
+			inputAuthConfig: auth.Config{Enabled: true},
+			inputIdentity:   &auth.Identity{Name: "admin", Scopes: []string{"api"}},
+			expectedCode:    http.StatusForbidden,
+		},
+		{
+			payload: `{"kind": "mail", "process_after": 5, "data": "{\"message\": \"/{sig_auth:alive}\", \"destination\": [\"a@b.com\"], \"subject\": \"hi\"}"}`,
+			mockExecuteFunc: func() execute.ExecuteInterface {
+				e := new(mockExecute)
+				e.On("Run", &state.Action{Kind: "mail", Data: "{\"message\": \"/{sig_auth:alive}\", \"destination\": [\"a@b.com\"], \"subject\": \"hi\"}", ProcessAfter: 5}).Return(nil)
+				return e
+			},
+			inputAuthConfig: auth.Config{Enabled: true},
+			inputIdentity:   &auth.Identity{Name: "admin", Scopes: []string{"api", "alive"}},
+			expectedCode:    http.StatusOK,
+		},
 	}
 	for _, test := range tests {
 		reqBody := bytes.NewBufferString(test.payload)
 		req, err := http.NewRequest("POST", "/api/action/test", reqBody)
 		require.Nil(t, err)
 		req.Header.Set("Content-Type", "application/json")
+		if test.inputIdentity != nil {
+			req = req.WithContext(auth.ContextWithIdentity(req.Context(), test.inputIdentity))
+		}
 
 		w := httptest.NewRecorder()
 		e := test.mockExecuteFunc()
 
-		handler := testActionHandler(e)
+		handler := testActionHandler(e, test.inputAuthConfig)
 
 		handler(w, req)
 		require.Equal(t, test.expectedCode, w.Code)
@@ -419,10 +445,88 @@ func TestAddActionRequestBind(t *testing.T) {
 	}
 }
 
+func TestValidateSigAuthScopes(t *testing.T) {
+	tests := []struct {
+		inputAuthConfig auth.Config
+		inputIdentity   *auth.Identity
+		inputData       string
+		expectedError   string
+	}{
+		{
+			inputAuthConfig: auth.Config{Enabled: false},
+			inputData:       `{"message": "/{sig_auth:alive}"}`,
+		},
+		{
+			inputAuthConfig: auth.Config{Enabled: true},
+			inputIdentity:   &auth.Identity{Name: "admin", Scopes: []string{"api"}},
+			inputData:       `{"message": "no placeholder"}`,
+		},
+		{
+			inputAuthConfig: auth.Config{Enabled: true},
+			inputIdentity:   &auth.Identity{Name: "admin", Scopes: []string{"alive"}},
+			inputData:       `{"message": "/{sig_auth:alive}"}`,
+		},
+		{
+			inputAuthConfig: auth.Config{Enabled: true},
+			inputIdentity:   &auth.Identity{Name: "admin", Scopes: []string{"api"}},
+			inputData:       `{"message": "/{sig_auth:alive}"}`,
+			expectedError:   "not allowed to sign /alive",
+		},
+		{
+			inputAuthConfig: auth.Config{Enabled: true},
+			inputData:       `{"message": "/{sig_auth:alive}"}`,
+			expectedError:   "not allowed to sign /alive",
+		},
+		{
+			inputAuthConfig: auth.Config{Enabled: true, AnonymousScopes: []string{"alive"}},
+			inputIdentity:   &auth.Identity{Name: "admin", Scopes: []string{"api"}},
+			inputData:       `{"message": "/{sig_auth:alive}"}`,
+			expectedError:   "not allowed to sign /alive",
+		},
+		{
+			inputAuthConfig: auth.Config{Enabled: true},
+			inputIdentity:   &auth.Identity{Name: "admin", Scopes: []string{"alive"}},
+			inputData:       `{"message": "/{sig_auth:alive} and /{sig_auth:metrics}"}`,
+			expectedError:   "not allowed to sign /metrics",
+		},
+		{
+			inputAuthConfig: auth.Config{Enabled: true},
+			inputIdentity:   &auth.Identity{Name: "admin", Scopes: []string{"alive", "metrics"}},
+			inputData:       `{"message": "/{sig_auth:alive} and /{sig_auth:metrics}"}`,
+		},
+		{
+			inputAuthConfig: auth.Config{Enabled: true},
+			inputIdentity:   &auth.Identity{Name: "admin", Scopes: []string{"api", "alive", "metrics"}},
+			inputData:       `{"message": "/{sig_auth:alive}"}`,
+		},
+		{
+			inputAuthConfig: auth.Config{Enabled: true},
+			inputIdentity:   &auth.Identity{Name: "admin", Scopes: []string{"api", "alive"}},
+			inputData:       `{"message": "/{sig_auth:alive} and /{sig_auth:metrics}"}`,
+			expectedError:   "not allowed to sign /metrics",
+		},
+	}
+	for _, test := range tests {
+		req := httptest.NewRequest("POST", "/api/action/store", nil)
+		if test.inputIdentity != nil {
+			req = req.WithContext(auth.ContextWithIdentity(req.Context(), test.inputIdentity))
+		}
+		err := validateSigAuthScopes(req, test.inputAuthConfig, test.inputData)
+		if test.expectedError == "" {
+			require.Nil(t, err)
+		} else {
+			require.NotNil(t, err)
+			require.Equal(t, test.expectedError, err.Error())
+		}
+	}
+}
+
 func TestAddActionHandler(t *testing.T) {
 	tests := []struct {
 		payload         string
 		mockStateFunc   func() state.StateInterface
+		inputAuthConfig auth.Config
+		inputIdentity   *auth.Identity
 		expectedCode    int
 		expectedActions []*state.EncryptedAction
 	}{
@@ -479,17 +583,49 @@ func TestAddActionHandler(t *testing.T) {
 				{Action: state.Action{Kind: "bulksms", Data: "encrypted2", ProcessAfter: 10, Comment: ""}},
 			},
 		},
+		{
+			payload: `{"kind": "mail", "process_after": 10, "data": "{\"message\":\"/{sig_auth:alive}\",\"destination\":[\"a@b.com\"],\"subject\":\"hi\"}"}`,
+			mockStateFunc: func() state.StateInterface {
+				s := new(mockState)
+				s.On("GetActions").Return([]*state.EncryptedAction{})
+				return s
+			},
+			inputAuthConfig: auth.Config{Enabled: true},
+			inputIdentity:   &auth.Identity{Name: "admin", Scopes: []string{"api"}},
+			expectedCode:    http.StatusForbidden,
+			expectedActions: []*state.EncryptedAction{},
+		},
+		{
+			payload: `{"kind": "mail", "process_after": 10, "data": "{\"message\":\"/{sig_auth:alive}\",\"destination\":[\"a@b.com\"],\"subject\":\"hi\"}"}`,
+			mockStateFunc: func() state.StateInterface {
+				s := new(mockState)
+				s.On("AddAction", &state.Action{Kind: "mail", Data: "{\"message\":\"/{sig_auth:alive}\",\"destination\":[\"a@b.com\"],\"subject\":\"hi\"}", ProcessAfter: 10, Comment: ""}).Return(nil)
+				s.On("GetActions").Return([]*state.EncryptedAction{
+					{Action: state.Action{Kind: "mail", Data: "encrypted", ProcessAfter: 10, Comment: ""}},
+				})
+				return s
+			},
+			inputAuthConfig: auth.Config{Enabled: true},
+			inputIdentity:   &auth.Identity{Name: "admin", Scopes: []string{"api", "alive"}},
+			expectedCode:    http.StatusCreated,
+			expectedActions: []*state.EncryptedAction{
+				{Action: state.Action{Kind: "mail", Data: "encrypted", ProcessAfter: 10, Comment: ""}},
+			},
+		},
 	}
 	for _, test := range tests {
 		reqBody := bytes.NewBufferString(test.payload)
 		req, err := http.NewRequest("POST", "/api/action/store", reqBody)
 		require.Nil(t, err)
 		req.Header.Set("Content-Type", "application/json")
+		if test.inputIdentity != nil {
+			req = req.WithContext(auth.ContextWithIdentity(req.Context(), test.inputIdentity))
+		}
 
 		w := httptest.NewRecorder()
 		s := test.mockStateFunc()
 
-		handler := addActionHandler(s)
+		handler := addActionHandler(s, test.inputAuthConfig)
 
 		handler(w, req)
 		require.Equal(t, test.expectedCode, w.Code)
