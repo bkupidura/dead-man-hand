@@ -657,7 +657,7 @@ func TestGenBearer(t *testing.T) {
 			newBearerToken = test.mockToken
 		}
 
-		out, err := captureCLIOutput(t, "dmh-cli", "auth", "generate-bearer")
+		out, err := captureCLIOutput(t, "dmh-cli", "crypt", "generate-bearer")
 
 		if test.expectedError != "" {
 			require.NotNil(t, err)
@@ -696,7 +696,7 @@ func TestCreateCLI(t *testing.T) {
 	for _, c := range cmd.Commands {
 		cmdNames = append(cmdNames, c.Name)
 	}
-	require.ElementsMatch(t, []string{"alive", "action", "auth"}, cmdNames)
+	require.ElementsMatch(t, []string{"alive", "action", "crypt"}, cmdNames)
 }
 
 func TestDoRequest(t *testing.T) {
@@ -1032,5 +1032,73 @@ func TestProcessActionsFromFile(t *testing.T) {
 			require.NoError(t, err)
 		}
 		require.Equal(t, test.expectedSent, sent)
+	}
+}
+
+func TestGenSignedSecret(t *testing.T) {
+	tests := []struct {
+		mockSecret    func() (string, error)
+		expectedError string
+	}{
+		{
+			expectedError: "",
+		},
+		{
+			mockSecret:    func() (string, error) { return "", fmt.Errorf("crypto failure") },
+			expectedError: "crypto failure",
+		},
+	}
+
+	for _, test := range tests {
+		original := newSignedSecret
+		defer func() { newSignedSecret = original }()
+		if test.mockSecret != nil {
+			newSignedSecret = test.mockSecret
+		}
+
+		out, err := captureCLIOutput(t, "dmh-cli", "crypt", "generate-signed-secret")
+
+		if test.expectedError != "" {
+			require.NotNil(t, err)
+			require.Equal(t, test.expectedError, err.Error())
+		} else {
+			require.Nil(t, err)
+			require.Contains(t, out, "SignedURLSecret:")
+			require.Regexp(t, `(?m)SignedURLSecret:\s*[a-f0-9]+`, out)
+		}
+	}
+}
+
+func TestGenAgeKey(t *testing.T) {
+	tests := []struct {
+		mockAge       func(string) (crypt.AgeInterface, error)
+		expectedError string
+	}{
+		{
+			expectedError: "",
+		},
+		{
+			mockAge:       func(string) (crypt.AgeInterface, error) { return nil, fmt.Errorf("age failure") },
+			expectedError: "age failure",
+		},
+	}
+
+	for _, test := range tests {
+		original := newAge
+		defer func() { newAge = original }()
+		if test.mockAge != nil {
+			newAge = test.mockAge
+		}
+
+		out, err := captureCLIOutput(t, "dmh-cli", "crypt", "generate-age-key")
+
+		if test.expectedError != "" {
+			require.NotNil(t, err)
+			require.Equal(t, test.expectedError, err.Error())
+		} else {
+			require.Nil(t, err)
+			require.Contains(t, out, "PrivateKey:")
+			require.Regexp(t, `(?m)PrivateKey:\s*AGE-SECRET-KEY-1`, out)
+		}
 	}
 }
