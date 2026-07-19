@@ -28,7 +28,9 @@ var (
 	getClient   = func(cmd *cli.Command) *http.Client {
 		return &http.Client{Timeout: httpClientTimeout}
 	}
-	newBearerToken = crypt.NewBearerToken
+	newBearerToken  = crypt.NewBearerToken
+	newAge          = crypt.NewAge
+	newSignedSecret = crypt.NewSignedURLSecret
 )
 
 const defaultServerAddr = "http://127.0.0.1:8080"
@@ -153,13 +155,23 @@ func createCLI() *cli.Command {
 				},
 			},
 			{
-				Name:  "auth",
-				Usage: "Authentication management",
+				Name:  "crypt",
+				Usage: "Cryptographic key management",
 				Commands: []*cli.Command{
 					{
 						Name:   "generate-bearer",
 						Usage:  "Generate a new bearer token (prints plaintext bearer token + its sha256)",
 						Action: genBearer,
+					},
+					{
+						Name:   "generate-signed-secret",
+						Usage:  "Generate a new signed URL secret (for auth.signed_url.secret in config)",
+						Action: genSignedSecret,
+					},
+					{
+						Name:   "generate-age-key",
+						Usage:  "Generate a new age key (for vault.key in config)",
+						Action: genAgeKey,
 					},
 				},
 			},
@@ -175,6 +187,26 @@ func genBearer(ctx context.Context, cmd *cli.Command) error {
 	}
 	fmt.Fprintf(os.Stdout, "BearerToken: %s\n", token.Plaintext)
 	fmt.Fprintf(os.Stdout, "SHA256: %s\n", token.Hash)
+	return nil
+}
+
+// genSignedSecret generates a signed URL secret.
+func genSignedSecret(ctx context.Context, cmd *cli.Command) error {
+	secret, err := newSignedSecret()
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stdout, "SignedURLSecret: %s\n", secret)
+	return nil
+}
+
+// genAgeKey generates a new age identity and returns the private key.
+func genAgeKey(ctx context.Context, cmd *cli.Command) error {
+	ageInterface, err := newAge("")
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stdout, "PrivateKey: %s\n", ageInterface.GetPrivateKey())
 	return nil
 }
 func main() {
