@@ -1,9 +1,12 @@
 package api
 
 import (
+	"bytes"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -542,6 +545,45 @@ func TestNewRouter(t *testing.T) {
 		require.Equal(t, test.statusCode, w.Code)
 		if test.expectedBodyContains != "" {
 			require.Contains(t, w.Body.String(), test.expectedBodyContains)
+		}
+	}
+}
+
+func TestLogIdentityOnDenial(t *testing.T) {
+	tests := []struct {
+		authorization       string
+		expectedHasIdentity bool
+	}{
+		{
+			authorization:       "",
+			expectedHasIdentity: false,
+		},
+		{
+			authorization:       "Bearer example-bearer-token",
+			expectedHasIdentity: true,
+		},
+	}
+	for _, test := range tests {
+		s := new(mockState)
+		router := NewRouter(&Options{State: s, DMHEnabled: true, Auth: testAuthConfig([]string{"metrics"}, nil)})
+
+		req := httptest.NewRequest("GET", "/api/action/store", nil)
+		if test.authorization != "" {
+			req.Header.Set("Authorization", test.authorization)
+		}
+		w := httptest.NewRecorder()
+
+		buf := &bytes.Buffer{}
+		log.SetOutput(buf)
+		defer log.SetOutput(os.Stderr)
+
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusUnauthorized, w.Code)
+		if test.expectedHasIdentity {
+			require.Contains(t, buf.String(), "identity=test")
+		} else {
+			require.NotContains(t, buf.String(), "identity=")
 		}
 	}
 }
