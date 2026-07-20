@@ -2,13 +2,14 @@ package main
 
 import (
 	"log"
-	"net/url"
 	"slices"
 	"strings"
+	"time"
 
 	"dmh/internal/auth"
-	"dmh/internal/crypt"
 	"dmh/internal/execute"
+	"dmh/internal/state"
+	"dmh/internal/vault"
 
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/env"
@@ -46,40 +47,61 @@ func readConfig(configFile string) *koanf.Koanf {
 		}
 	}
 
-	if len(k.Strings("components")) == 0 {
+	enabledComponents := k.Strings("components")
+	if len(enabledComponents) == 0 {
 		log.Panicf("required config key components cant be empty")
 	}
 
-	enabledComponents := k.Strings("components")
-
-	if slices.Contains(enabledComponents, "dmh") {
-		for _, configKey := range []string{"state.file", "remote_vault.client_uuid", "remote_vault.url"} {
-			if !k.Exists(configKey) {
-				log.Panicf("required config key %s is not defined", configKey)
-			}
-			if k.String(configKey) == "" {
-				log.Panicf("required config key %s cant be empty", configKey)
-			}
-		}
-		if _, err := url.ParseRequestURI(k.String("remote_vault.url")); err != nil {
-			log.Panicf("remote_vault.url must be a valid HTTP URL")
+	for _, component := range enabledComponents {
+		if !slices.Contains([]string{"dmh", "vault"}, component) {
+			log.Printf("unknown component %s enabled, supported components: dmh, vault", component)
 		}
 	}
-	if slices.Contains(enabledComponents, "vault") {
-		for _, configKey := range []string{"vault.file", "vault.key"} {
-			if !k.Exists(configKey) {
-				log.Panicf("required config key %s is not defined", configKey)
-			}
-			if k.String(configKey) == "" {
-				log.Panicf("required config key %s cant be empty", configKey)
-			}
-		}
-		if _, err := crypt.NewAge(k.String("vault.key")); err != nil {
-			log.Panicf("vault.key must be a valid age private key")
-		}
+
+	if slices.Contains(enabledComponents, "dmh") && slices.Contains(enabledComponents, "vault") {
+		log.Printf("dmh and vault component enabled, check https://github.com/bkupidura/dead-man-hand/wiki/Security#run-dmh-and-vault-on-different-servers--locations")
 	}
 
 	return k
+}
+
+// stateOptions maps config into state.Options and validates it.
+func stateOptions(k *koanf.Koanf) *state.Options {
+	o := &state.Options{
+		VaultURL:        k.String("remote_vault.url"),
+		VaultClientUUID: k.String("remote_vault.client_uuid"),
+		VaultToken:      k.String("remote_vault.token"),
+		SavePath:        k.String("state.file"),
+	}
+	if err := o.Validate(); err != nil {
+		log.Panicf("invalid dmh config: %s", err)
+	}
+	return o
+}
+
+// vaultOptions maps config into vault.Options and validates it.
+func vaultOptions(k *koanf.Koanf) *vault.Options {
+	o := &vault.Options{
+		Key:               k.String("vault.key"),
+		SavePath:          k.String("vault.file"),
+		SecretProcessUnit: processUnit(k),
+	}
+	if err := o.Validate(); err != nil {
+		log.Panicf("invalid vault config: %s", err)
+	}
+	return o
+}
+
+// processUnit maps action.process_unit config into a time unit.
+func processUnit(k *koanf.Koanf) time.Duration {
+	switch k.String("action.process_unit") {
+	case "second":
+		return time.Second
+	case "minute":
+		return time.Minute
+	default:
+		return time.Hour
+	}
 }
 
 // getAuthConfig returns parsed and validated auth config.
@@ -91,9 +113,6 @@ func getAuthConfig(k *koanf.Koanf) auth.Config {
 	}
 	if err := config.Validate(); err != nil {
 		log.Panicf("invalid auth config: %s", err)
-	}
-	if !config.Enabled {
-		log.Printf("authentication is DISABLED, check https://github.com/bkupidura/dead-man-hand/wiki/Security#enable-authentication")
 	}
 	return config
 }

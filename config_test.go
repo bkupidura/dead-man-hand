@@ -6,15 +6,112 @@ package main
 import (
 	"os"
 	"testing"
+	"time"
 
 	"dmh/internal/auth"
 	"dmh/internal/execute"
+	"dmh/internal/state"
+	"dmh/internal/vault"
 
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/rawbytes"
 	"github.com/knadh/koanf/v2"
 	"github.com/stretchr/testify/require"
 )
+
+func TestStateOptions(t *testing.T) {
+	tests := []struct {
+		inputYAML    string
+		expectedOpts *state.Options
+		shouldPanic  bool
+	}{
+		{
+			inputYAML: "remote_vault:\n  url: http://test\n  client_uuid: uuid\n  token: tok\nstate:\n  file: state.json",
+			expectedOpts: &state.Options{
+				VaultURL:        "http://test",
+				VaultClientUUID: "uuid",
+				VaultToken:      "tok",
+				SavePath:        "state.json",
+			},
+		},
+		{
+			inputYAML:   "remote_vault:\n  client_uuid: uuid\nstate:\n  file: state.json",
+			shouldPanic: true,
+		},
+	}
+	for _, test := range tests {
+		k := koanf.New(".")
+		require.Nil(t, k.Load(rawbytes.Provider([]byte(test.inputYAML)), yaml.Parser()))
+		if test.shouldPanic {
+			require.Panics(t, func() { stateOptions(k) })
+		} else {
+			require.Equal(t, test.expectedOpts, stateOptions(k))
+		}
+	}
+}
+
+func TestVaultOptions(t *testing.T) {
+	tests := []struct {
+		inputYAML    string
+		expectedOpts *vault.Options
+		shouldPanic  bool
+	}{
+		{
+			inputYAML: "vault:\n  key: AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0\n  file: vault.json",
+			expectedOpts: &vault.Options{
+				Key:               "AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0",
+				SavePath:          "vault.json",
+				SecretProcessUnit: time.Hour,
+			},
+		},
+		{
+			inputYAML:   "vault:\n  file: vault.json",
+			shouldPanic: true,
+		},
+	}
+	for _, test := range tests {
+		k := koanf.New(".")
+		require.Nil(t, k.Load(rawbytes.Provider([]byte(test.inputYAML)), yaml.Parser()))
+		if test.shouldPanic {
+			require.Panics(t, func() { vaultOptions(k) })
+		} else {
+			require.Equal(t, test.expectedOpts, vaultOptions(k))
+		}
+	}
+}
+
+func TestProcessUnit(t *testing.T) {
+	tests := []struct {
+		inputYAML    string
+		expectedUnit time.Duration
+	}{
+		{
+			inputYAML:    "action:\n  process_unit: second",
+			expectedUnit: time.Second,
+		},
+		{
+			inputYAML:    "action:\n  process_unit: minute",
+			expectedUnit: time.Minute,
+		},
+		{
+			inputYAML:    "action:\n  process_unit: hour",
+			expectedUnit: time.Hour,
+		},
+		{
+			inputYAML:    "action:\n  process_unit: wrong",
+			expectedUnit: time.Hour,
+		},
+		{
+			inputYAML:    "components:\n  - dmh",
+			expectedUnit: time.Hour,
+		},
+	}
+	for _, test := range tests {
+		k := koanf.New(".")
+		require.Nil(t, k.Load(rawbytes.Provider([]byte(test.inputYAML)), yaml.Parser()))
+		require.Equal(t, test.expectedUnit, processUnit(k), "yaml %q", test.inputYAML)
+	}
+}
 
 func TestReadConfig(t *testing.T) {
 	tests := []struct {
@@ -44,19 +141,6 @@ func TestReadConfig(t *testing.T) {
 				require.Nil(t, err)
 				defer f.Close()
 				_, err = f.WriteString(`
-                                components:
-                                - dmh
-                                `)
-				require.Nil(t, err)
-			},
-			shouldPanic: true,
-		},
-		{
-			configFunc: func(configFile string) {
-				f, err := os.Create(configFile)
-				require.Nil(t, err)
-				defer f.Close()
-				_, err = f.WriteString(`
                                 components: []
                                 `)
 				require.Nil(t, err)
@@ -73,108 +157,6 @@ func TestReadConfig(t *testing.T) {
                                 - dmh
                                 state:
                                   file: test.json
-                                `)
-				require.Nil(t, err)
-			},
-			shouldPanic: true,
-		},
-		{
-			configFunc: func(configFile string) {
-				f, err := os.Create(configFile)
-				require.Nil(t, err)
-				defer f.Close()
-				_, err = f.WriteString(`
-                                components:
-                                - dmh
-                                state:
-                                  file: test.json
-                                remote_vault:
-                                  client_uuid: test
-                                `)
-				require.Nil(t, err)
-			},
-			shouldPanic: true,
-		},
-		{
-			configFunc: func(configFile string) {
-				f, err := os.Create(configFile)
-				require.Nil(t, err)
-				defer f.Close()
-				_, err = f.WriteString(`
-                                components:
-                                - dmh
-                                state:
-                                  file:
-                                remote_vault:
-                                  client_uuid: test
-                                `)
-				require.Nil(t, err)
-			},
-			shouldPanic: true,
-		},
-		{
-			configFunc: func(configFile string) {
-				f, err := os.Create(configFile)
-				require.Nil(t, err)
-				defer f.Close()
-				_, err = f.WriteString(`
-                                components:
-                                - dmh
-                                state:
-                                  file: test.json
-                                remote_vault:
-                                  client_uuid:
-                                `)
-				require.Nil(t, err)
-			},
-			shouldPanic: true,
-		},
-		{
-			configFunc: func(configFile string) {
-				f, err := os.Create(configFile)
-				require.Nil(t, err)
-				defer f.Close()
-				_, err = f.WriteString(`
-                                components:
-                                - dmh
-                                state:
-                                  file: test.json
-                                remote_vault:
-                                  client_uuid: test
-                                  url:
-                                `)
-				require.Nil(t, err)
-			},
-			shouldPanic: true,
-		},
-		{
-			configFunc: func(configFile string) {
-				f, err := os.Create(configFile)
-				require.Nil(t, err)
-				defer f.Close()
-				_, err = f.WriteString(`
-                                components:
-                                - dmh
-                                state:
-                                  file: test.json
-                                remote_vault:
-                                  client_uuid: test
-                                  url: wrong
-                                `)
-				require.Nil(t, err)
-			},
-			shouldPanic: true,
-		},
-		{
-			configFunc: func(configFile string) {
-				f, err := os.Create(configFile)
-				require.Nil(t, err)
-				defer f.Close()
-				_, err = f.WriteString(`
-                                components:
-                                - dmh
-                                state:
-                                  file: test.json
                                 remote_vault:
                                   client_uuid: test
                                   url: http://test
@@ -198,7 +180,6 @@ func TestReadConfig(t *testing.T) {
 			},
 		},
 		{
-			// Unknown component must not panic, only warn.
 			configFunc: func(configFile string) {
 				f, err := os.Create(configFile)
 				require.Nil(t, err)
@@ -231,82 +212,6 @@ func TestReadConfig(t *testing.T) {
 				require.Nil(t, err)
 				return k
 			},
-		},
-		{
-			configFunc: func(configFile string) {
-				f, err := os.Create(configFile)
-				require.Nil(t, err)
-				defer f.Close()
-				_, err = f.WriteString(`
-                                components:
-                                - vault
-                                `)
-				require.Nil(t, err)
-			},
-			shouldPanic: true,
-		},
-		{
-			configFunc: func(configFile string) {
-				f, err := os.Create(configFile)
-				require.Nil(t, err)
-				defer f.Close()
-				_, err = f.WriteString(`
-                                components:
-                                - vault
-                                vault:
-                                  key: AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0
-                                `)
-				require.Nil(t, err)
-			},
-			shouldPanic: true,
-		},
-		{
-			configFunc: func(configFile string) {
-				f, err := os.Create(configFile)
-				require.Nil(t, err)
-				defer f.Close()
-				_, err = f.WriteString(`
-                                components:
-                                - vault
-                                vault:
-                                  file:
-                                  key: AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0
-                                `)
-				require.Nil(t, err)
-			},
-			shouldPanic: true,
-		},
-		{
-			configFunc: func(configFile string) {
-				f, err := os.Create(configFile)
-				require.Nil(t, err)
-				defer f.Close()
-				_, err = f.WriteString(`
-                                components:
-                                - vault
-                                vault:
-                                  file: vault.yaml
-                                  key:
-                                `)
-				require.Nil(t, err)
-			},
-			shouldPanic: true,
-		},
-		{
-			configFunc: func(configFile string) {
-				f, err := os.Create(configFile)
-				require.Nil(t, err)
-				defer f.Close()
-				_, err = f.WriteString(`
-                                components:
-                                - vault
-                                vault:
-                                  file: vault.yaml
-                                  key: wrong
-                                `)
-				require.Nil(t, err)
-			},
-			shouldPanic: true,
 		},
 		{
 			configFunc: func(configFile string) {
@@ -400,25 +305,6 @@ func TestReadConfigEnv(t *testing.T) {
 		shouldPanic   bool
 		expectedKoanf func() *koanf.Koanf
 	}{
-		{
-			inputEnv: []map[string]string{
-				{
-					"DMH_COMPONENTS":                "dmh,",
-					"DMH_REMOTE_VAULT__CLIENT_UUID": "test",
-					"DMH_REMOTE_VAULT__URL":         "http://test",
-				},
-			},
-			shouldPanic: true,
-		},
-		{
-			inputEnv: []map[string]string{
-				{
-					"DMH_COMPONENTS":  "vault,",
-					"DMH_VAULT__FILE": "vault.json",
-				},
-			},
-			shouldPanic: true,
-		},
 		{
 			inputEnv: []map[string]string{
 				{

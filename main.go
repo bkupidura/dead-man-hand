@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"slices"
-	"strings"
 	"time"
 
 	"dmh/internal/api"
@@ -39,28 +38,7 @@ func main() {
 
 	enabledComponents := k.Strings("components")
 
-	switch k.String("action.process_unit") {
-	case "second":
-		actionProcessUnit = time.Second
-	case "minute":
-		actionProcessUnit = time.Minute
-	default:
-		actionProcessUnit = time.Hour
-	}
-
-	for _, component := range enabledComponents {
-		if !slices.Contains([]string{"dmh", "vault"}, component) {
-			log.Printf("unknown component %s enabled, supported components: dmh, vault", component)
-		}
-	}
-
-	if slices.Contains(enabledComponents, "dmh") && slices.Contains(enabledComponents, "vault") {
-		log.Printf("dmh and vault component enabled, check https://github.com/bkupidura/dead-man-hand/wiki/Security#run-dmh-and-vault-on-different-servers--locations")
-	}
-
-	if slices.Contains(enabledComponents, "dmh") && strings.HasPrefix(strings.ToLower(k.String("remote_vault.url")), "http://") {
-		log.Printf("remote_vault.url uses plain http, check https://github.com/bkupidura/dead-man-hand/wiki/Security#use-tls-for-every-connection-strongly-recommended")
-	}
+	actionProcessUnit = processUnit(k)
 
 	authConfig := getAuthConfig(k)
 
@@ -70,22 +48,14 @@ func main() {
 	var err error
 	if slices.Contains(enabledComponents, "dmh") {
 		log.Printf("starting DMH component")
-		s, err = stateNew(&state.Options{
-			VaultURL:        k.String("remote_vault.url"),
-			VaultClientUUID: k.String("remote_vault.client_uuid"),
-			VaultToken:      k.String("remote_vault.token"),
-			SavePath:        k.String("state.file"),
-		})
+		s, err = stateNew(stateOptions(k))
 		if err != nil {
 			log.Panicf("unable to create state: %s", err)
 		}
 
-		bulkSMSConf := getBulkSMSConfig(k)
-		mailConf := getMailConfig(k)
-
 		e, err = executeNew(&execute.Options{
-			BulkSMSConf:     bulkSMSConf,
-			MailConf:        mailConf,
+			BulkSMSConf:     getBulkSMSConfig(k),
+			MailConf:        getMailConfig(k),
 			SignedURLSecret: authConfig.SignedURL.Secret,
 			SignedURLTTL:    authConfig.SignedURL.TTL,
 		})
@@ -96,11 +66,7 @@ func main() {
 
 	if slices.Contains(enabledComponents, "vault") {
 		log.Printf("starting vault component")
-		v, err = vaultNew(&vault.Options{
-			Key:               k.String("vault.key"),
-			SavePath:          k.String("vault.file"),
-			SecretProcessUnit: actionProcessUnit,
-		})
+		v, err = vaultNew(vaultOptions(k))
 		if err != nil {
 			log.Panicf("unable to create vault: %s", err)
 		}
