@@ -54,6 +54,7 @@ type Config struct {
 // Validate checks Config.
 func (c *Config) Validate() error {
 	if !c.Enabled {
+		log.Printf("authentication is DISABLED, check https://github.com/bkupidura/dead-man-hand/wiki/Security#enable-authentication")
 		return nil
 	}
 	for _, scope := range c.AnonymousScopes {

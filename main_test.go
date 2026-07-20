@@ -127,6 +127,38 @@ func TestReadingConfig(t *testing.T) {
 				return nil, fmt.Errorf("mockStateNew error")
 			},
 		},
+		{
+			inputConfig: func() {
+				f, err := os.Create("invalid_dmh.yaml")
+				require.Nil(t, err)
+				defer f.Close()
+				_, err = f.WriteString(`
+                                components: ['dmh']
+                                auth:
+                                  enabled: false
+                                state:
+                                  file: test.yaml
+                                remote_vault:
+                                  client_uuid: uuid`)
+				require.Nil(t, err)
+			},
+			envConfigVar: "invalid_dmh.yaml",
+		},
+		{
+			inputConfig: func() {
+				f, err := os.Create("invalid_vault.yaml")
+				require.Nil(t, err)
+				defer f.Close()
+				_, err = f.WriteString(`
+                                components: ['vault']
+                                auth:
+                                  enabled: false
+                                vault:
+                                  file: test.yaml`)
+				require.Nil(t, err)
+			},
+			envConfigVar: "invalid_vault.yaml",
+		},
 	}
 	for _, test := range tests {
 		test.inputConfig()
@@ -291,6 +323,8 @@ func TestComponentsErrors(t *testing.T) {
 	defer f.Close()
 	_, err = f.WriteString(`
                components: ['dmh', 'vault', 'unknown']
+               auth:
+                 enabled: false
                state:
                  file: test.yaml
                remote_vault:
