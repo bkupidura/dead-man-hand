@@ -385,6 +385,57 @@ func TestReadConfigEnv(t *testing.T) {
 				return k
 			},
 		},
+		{
+			inputEnv: []map[string]string{
+				{
+					"DMH_COMPONENTS":            "vault,",
+					"DMH_VAULT__FILE":           "vault.json",
+					"DMH_VAULT__KEY":            "AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0",
+					"DMH_AUTH__ANONYMOUS_SCOPE": "healthz,ready",
+				},
+			},
+			expectedKoanf: func() *koanf.Koanf {
+				b := []byte(`
+                                components:
+                                  - vault
+                                  - ""
+                                vault:
+                                  file: vault.json
+                                  key: AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0
+                                auth:
+                                  anonymous_scope:
+                                    - healthz
+                                    - ready
+                                `)
+				k := koanf.New(".")
+				err := k.Load(rawbytes.Provider(b), yaml.Parser())
+				require.Nil(t, err)
+				return k
+			},
+		},
+		{
+			inputEnv: []map[string]string{
+				{
+					"DMH_COMPONENTS":  "vault,",
+					"DMH_VAULT__FILE": "vault.json",
+					"DMH_VAULT__KEY":  "part-one,part-two",
+				},
+			},
+			expectedKoanf: func() *koanf.Koanf {
+				b := []byte(`
+                                components:
+                                  - vault
+                                  - ""
+                                vault:
+                                  file: vault.json
+                                  key: "part-one,part-two"
+                                `)
+				k := koanf.New(".")
+				err := k.Load(rawbytes.Provider(b), yaml.Parser())
+				require.Nil(t, err)
+				return k
+			},
+		},
 	}
 	configFile := "test_config.yaml"
 	os.Remove(configFile)

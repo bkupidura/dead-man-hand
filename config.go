@@ -17,6 +17,9 @@ import (
 	"github.com/knadh/koanf/v2"
 )
 
+// envListKeys are comma-split when set from an environment variable, other keys keep commas verbatim.
+var envListKeys = []string{"components", "auth.anonymous_scope"}
+
 // readConfig reads configFile and feeds it to koanf.
 // readConfig can be feeded from env variables:
 // DMH_REMOTE_VAULT__URL=http://test -> remote_vault.url=http://test
@@ -31,11 +34,9 @@ func readConfig(configFile string) *koanf.Koanf {
 	k.Load(env.ProviderWithValue("DMH_", ".", func(s string, v string) (string, any) {
 		key := strings.Replace(strings.ToLower(strings.TrimPrefix(s, "DMH_")), "__", ".", -1)
 
-		// If there is a coma in the value, split the value into a slice by the comma.
-		if strings.Contains(v, ",") {
+		if slices.Contains(envListKeys, key) && strings.Contains(v, ",") {
 			return key, strings.Split(v, ",")
 		}
-		// Otherwise, return the plain string.
 		return key, v
 	}), nil)
 
