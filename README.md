@@ -36,6 +36,7 @@ Main goal of `DMH` is to ensure that actions can be executed only when you are d
 ```
 docker run --name dead-man-hand -e DMH_CONFIG_FILE=/data/config.yaml -v /srv/dead-man-hand/data:/data -p 8080:8080 ghcr.io/bkupidura/dead-man-hand:latest
 ```
+The image runs as a non-root user (`uid:gid 1000:1000`). `/srv/dead-man-hand/data` must be writable by `dmh` user (`chown -R 1000:1000 /srv/dead-man-hand/data`)
 
 ## Baremetal
 1. Install `golang`
