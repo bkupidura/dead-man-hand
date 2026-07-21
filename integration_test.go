@@ -597,6 +597,16 @@ func TestDMH(t *testing.T) {
 	require.Contains(t, string(body), `dmh_action_errors_total{action="bf577b9d-26f4-4168-b8e4-0e1d692559ed",error="DecryptAction"} 10`)
 	require.Regexp(t, `dmh_action_errors_total{action="[a-f0-9-]+",error="Run"} [0-9]+`, string(body))
 
+	require.Contains(t, string(body), `dmh_http_requests_total{code="401",method="GET"} 3`)
+	require.Contains(t, string(body), `dmh_http_requests_total{code="201",method="POST"} 10`)
+	require.Contains(t, string(body), `dmh_http_requests_total{code="200",method="POST"} 3`)
+	require.Contains(t, string(body), `dmh_http_requests_total{code="403",method="POST"} 1`)
+
+	require.Contains(t, string(body), `dmh_auth_failures_total{reason="missing_credentials",type=""} 1`)
+	require.Contains(t, string(body), `dmh_auth_failures_total{reason="invalid_token",type="bearer"} 1`)
+	require.Contains(t, string(body), `dmh_auth_failures_total{reason="insufficient_scope",type="bearer"} 1`)
+	require.Regexp(t, `dmh_auth_success_total{type="bearer"} [0-9]+`, string(body))
+
 	// Human /alive page requires a credential when auth is enabled.
 	resp, err = http.Get("http://127.0.0.1:8080/alive")
 	require.Nil(t, err)

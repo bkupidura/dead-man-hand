@@ -13,9 +13,12 @@ import (
 
 	"dmh/internal/auth"
 	"dmh/internal/crypt"
+	"dmh/internal/metric"
 	"dmh/internal/state"
 	"dmh/internal/vault"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/stretchr/testify/require"
 )
 
@@ -586,4 +589,35 @@ func TestLogIdentityOnDenial(t *testing.T) {
 			require.NotContains(t, buf.String(), "identity=")
 		}
 	}
+}
+
+func TestMetricsWiring(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	m := metric.Initialize(&metric.Options{Registry: registry})
+	defer m.Stop()
+
+	s := new(mockState)
+	s.On("GetActions").Return([]*state.EncryptedAction{})
+	router := NewRouter(&Options{State: s, DMHEnabled: true, Metric: m, Auth: testAuthConfig([]string{"api"}, nil)})
+
+	req := httptest.NewRequest("GET", "/api/action/store", nil)
+	req.Header.Set("Authorization", "Bearer example-bearer-token")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	req2 := httptest.NewRequest("GET", "/api/action/store", nil)
+	w2 := httptest.NewRecorder()
+	router.ServeHTTP(w2, req2)
+	require.Equal(t, http.StatusUnauthorized, w2.Code)
+
+	mreq := httptest.NewRequest("GET", "/metrics", nil)
+	mw := httptest.NewRecorder()
+	promhttp.HandlerFor(registry, promhttp.HandlerOpts{}).ServeHTTP(mw, mreq)
+	body := mw.Body.String()
+
+	require.Contains(t, body, `dmh_http_requests_total{code="200",method="GET"} 1`)
+	require.Contains(t, body, `dmh_http_requests_total{code="401",method="GET"} 1`)
+	require.Contains(t, body, `dmh_auth_success_total{type="bearer"} 1`)
+	require.Contains(t, body, `dmh_auth_failures_total{reason="missing_credentials",type=""} 1`)
 }

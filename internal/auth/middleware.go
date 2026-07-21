@@ -12,11 +12,25 @@ type contextKey int
 
 const identityContextKey contextKey = iota
 
-// Identity describes authenticated requester.
-// It is stored in request context by authenticators and consumed by Authorizer.
+// AuthType identifies the mechanism that attempted or established an Identity.
+type AuthType string
+
+const (
+	AuthTypeBearer    AuthType = "bearer"
+	AuthTypeSignedURL AuthType = "signed_url"
+	AuthTypeAnonymous AuthType = "anonymous"
+)
+
+// Identity describes the requester and, once the auth chain has run, the
+// outcome of authentication/authorization for the request.
+// Name is set only when a credential actually resolved to a principal.
+// Type and Reason are populated even on failure (e.g. Type=bearer,
+// Reason=invalid_token).
 type Identity struct {
 	Name   string
 	Scopes []string
+	Type   AuthType
+	Reason string
 }
 
 // IdentityFromContext returns Identity stored in ctx or nil.
@@ -30,6 +44,25 @@ func ContextWithIdentity(ctx context.Context, identity *Identity) context.Contex
 	return context.WithValue(ctx, identityContextKey, identity)
 }
 
+// ensureIdentity returns r with an Identity in its context, reusing one already
+// present.
+func ensureIdentity(r *http.Request) (*http.Request, *Identity) {
+	if id := IdentityFromContext(r.Context()); id != nil {
+		return r, id
+	}
+	id := &Identity{}
+	return r.WithContext(ContextWithIdentity(r.Context(), id)), id
+}
+
+// SeedIdentity returns middleware which attaches an empty Identity to request
+// context, filled in place by the authenticators.
+func SeedIdentity(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r, _ = ensureIdentity(r)
+		next.ServeHTTP(w, r)
+	})
+}
+
 // BearerAuthenticator returns middleware which resolves Authorization header
 // into Identity stored in request context.
 // Identity already resolved by other authenticators is never overwritten.
@@ -37,14 +70,16 @@ func ContextWithIdentity(ctx context.Context, identity *Identity) context.Contex
 func BearerAuthenticator(tokens []Token) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if IdentityFromContext(r.Context()) == nil {
+			r, id := ensureIdentity(r)
+			if id.Name == "" {
 				if presented := bearerFromHeader(r); presented != "" {
+					id.Type = AuthTypeBearer
+					id.Reason = "invalid_token"
 					for _, token := range tokens {
 						if crypt.ValidateBearerToken(token.Hash, presented) {
-							r = r.WithContext(ContextWithIdentity(r.Context(), &Identity{
-								Name:   token.Name,
-								Scopes: token.Scopes,
-							}))
+							id.Name = token.Name
+							id.Scopes = token.Scopes
+							id.Reason = ""
 							break
 						}
 					}
@@ -63,13 +98,17 @@ func BearerAuthenticator(tokens []Token) func(http.Handler) http.Handler {
 func SignedURLAuthenticator(secret string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if IdentityFromContext(r.Context()) == nil {
+			r, id := ensureIdentity(r)
+			if id.Name == "" {
 				query := r.URL.Query()
-				if crypt.ValidateSignedURL(secret, r.URL.Path, query.Get("e"), query.Get("s")) {
-					r = r.WithContext(ContextWithIdentity(r.Context(), &Identity{
-						Name:   "signed-url",
-						Scopes: []string{pathScope(r.URL.Path)},
-					}))
+				if query.Get("e") != "" || query.Get("s") != "" {
+					id.Type = AuthTypeSignedURL
+					id.Reason = "invalid_signature"
+					if crypt.ValidateSignedURL(secret, r.URL.Path, query.Get("e"), query.Get("s")) {
+						id.Name = "signed-url"
+						id.Scopes = []string{pathScope(r.URL.Path)}
+						id.Reason = ""
+					}
 				}
 			}
 			next.ServeHTTP(w, r)
@@ -82,9 +121,22 @@ func SignedURLAuthenticator(secret string) func(http.Handler) http.Handler {
 func Authorizer(anonymousScopes []string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r, id := ensureIdentity(r)
+
 			if anyScopeCovers(anonymousScopes, pathSegments(r.URL.Path)) || IdentityCovers(r, r.URL.Path) {
+				if id.Name == "" {
+					id.Type = AuthTypeAnonymous
+				}
+				id.Reason = ""
 				next.ServeHTTP(w, r)
 				return
+			}
+
+			switch {
+			case id.Name != "":
+				id.Reason = "insufficient_scope"
+			case id.Reason == "":
+				id.Reason = "missing_credentials"
 			}
 
 			w.Header().Set("WWW-Authenticate", `Bearer realm="dmh"`)
@@ -98,7 +150,7 @@ func Authorizer(anonymousScopes []string) func(http.Handler) http.Handler {
 // IdentityCovers reports whether the request Identity scope covers urlPath.
 func IdentityCovers(r *http.Request, urlPath string) bool {
 	identity := IdentityFromContext(r.Context())
-	return identity != nil && anyScopeCovers(identity.Scopes, pathSegments(urlPath))
+	return identity != nil && identity.Name != "" && anyScopeCovers(identity.Scopes, pathSegments(urlPath))
 }
 
 // bearerFromHeader extracts bearer token from Authorization header.

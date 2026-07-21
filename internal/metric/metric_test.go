@@ -117,9 +117,17 @@ func TestInitialize(t *testing.T) {
 		require.NotNil(t, p.dmhActions)
 		require.NotNil(t, p.dmhMissingSecretsTotal)
 		require.NotNil(t, p.dmhActionErrorsTotal)
+		require.NotNil(t, p.httpRequestsTotal)
+		require.NotNil(t, p.httpRequestDuration)
+		require.NotNil(t, p.authSuccessTotal)
+		require.NotNil(t, p.authFailuresTotal)
 		require.IsType(t, &prometheus.GaugeVec{}, p.dmhActions)
 		require.IsType(t, &prometheus.CounterVec{}, p.dmhMissingSecretsTotal)
 		require.IsType(t, &prometheus.CounterVec{}, p.dmhActionErrorsTotal)
+		require.IsType(t, &prometheus.CounterVec{}, p.httpRequestsTotal)
+		require.IsType(t, &prometheus.HistogramVec{}, p.httpRequestDuration)
+		require.IsType(t, &prometheus.CounterVec{}, p.authSuccessTotal)
+		require.IsType(t, &prometheus.CounterVec{}, p.authFailuresTotal)
 	}
 }
 
@@ -406,6 +414,128 @@ func TestDMHActionErrorsTotal(t *testing.T) {
 
 		require.Regexp(t,
 			regexp.MustCompile(fmt.Sprintf(`dmh_action_errors_total{action=\"%s\",error=\"%s\"} %v`, test.inputActionUUID, test.inputErrorLabel, test.expected)),
+			string(body),
+		)
+	}
+}
+
+func TestRecordHTTPRequest(t *testing.T) {
+	tests := []struct {
+		inputMethod string
+		inputCode   int
+		inputCalls  int
+		expected    float64
+	}{
+		{"GET", 200, 1, 1},
+		{"POST", 401, 3, 3},
+		{"DELETE", 500, 0, 0},
+	}
+
+	for _, test := range tests {
+		opts := &Options{State: nil, Registry: prometheus.NewRegistry()}
+		p := Initialize(opts)
+		p.Stop()
+
+		for i := 0; i < test.inputCalls; i++ {
+			p.RecordHTTPRequest(test.inputMethod, test.inputCode, time.Millisecond)
+		}
+
+		req := httptest.NewRequest("GET", "/metrics", nil)
+		w := httptest.NewRecorder()
+
+		handler := promhttp.HandlerFor(opts.Registry.(prometheus.Gatherer), promhttp.HandlerOpts{})
+		handler.ServeHTTP(w, req)
+
+		resp := w.Result()
+		body, err := io.ReadAll(resp.Body)
+		require.Nil(t, err)
+
+		if test.inputCalls == 0 {
+			require.NotRegexp(t, regexp.MustCompile(fmt.Sprintf(`dmh_http_requests_total{code="%d",method="%s"}`, test.inputCode, test.inputMethod)), string(body))
+			continue
+		}
+		require.Regexp(t,
+			regexp.MustCompile(fmt.Sprintf(`dmh_http_requests_total{code="%d",method="%s"} %v`, test.inputCode, test.inputMethod, test.expected)),
+			string(body),
+		)
+		require.Regexp(t,
+			regexp.MustCompile(fmt.Sprintf(`dmh_http_request_duration_seconds_count{code="%d",method="%s"} %v`, test.inputCode, test.inputMethod, test.expected)),
+			string(body),
+		)
+	}
+}
+
+func TestRecordAuthSuccess(t *testing.T) {
+	tests := []struct {
+		inputType  string
+		inputCalls int
+		expected   float64
+	}{
+		{"bearer", 2, 2},
+		{"signed_url", 1, 1},
+		{"anonymous", 4, 4},
+	}
+
+	for _, test := range tests {
+		opts := &Options{State: nil, Registry: prometheus.NewRegistry()}
+		p := Initialize(opts)
+		p.Stop()
+
+		for i := 0; i < test.inputCalls; i++ {
+			p.RecordAuthSuccess(test.inputType)
+		}
+
+		req := httptest.NewRequest("GET", "/metrics", nil)
+		w := httptest.NewRecorder()
+
+		handler := promhttp.HandlerFor(opts.Registry.(prometheus.Gatherer), promhttp.HandlerOpts{})
+		handler.ServeHTTP(w, req)
+
+		resp := w.Result()
+		body, err := io.ReadAll(resp.Body)
+		require.Nil(t, err)
+
+		require.Regexp(t,
+			regexp.MustCompile(fmt.Sprintf(`dmh_auth_success_total{type="%s"} %v`, test.inputType, test.expected)),
+			string(body),
+		)
+	}
+}
+
+func TestRecordAuthFailure(t *testing.T) {
+	tests := []struct {
+		inputType   string
+		inputReason string
+		inputCalls  int
+		expected    float64
+	}{
+		{"bearer", "invalid_token", 2, 2},
+		{"signed_url", "invalid_signature", 1, 1},
+		{"", "missing_credentials", 3, 3},
+		{"bearer", "insufficient_scope", 1, 1},
+	}
+
+	for _, test := range tests {
+		opts := &Options{State: nil, Registry: prometheus.NewRegistry()}
+		p := Initialize(opts)
+		p.Stop()
+
+		for i := 0; i < test.inputCalls; i++ {
+			p.RecordAuthFailure(test.inputType, test.inputReason)
+		}
+
+		req := httptest.NewRequest("GET", "/metrics", nil)
+		w := httptest.NewRecorder()
+
+		handler := promhttp.HandlerFor(opts.Registry.(prometheus.Gatherer), promhttp.HandlerOpts{})
+		handler.ServeHTTP(w, req)
+
+		resp := w.Result()
+		body, err := io.ReadAll(resp.Body)
+		require.Nil(t, err)
+
+		require.Regexp(t,
+			regexp.MustCompile(fmt.Sprintf(`dmh_auth_failures_total{reason="%s",type="%s"} %v`, test.inputReason, test.inputType, test.expected)),
 			string(body),
 		)
 	}
