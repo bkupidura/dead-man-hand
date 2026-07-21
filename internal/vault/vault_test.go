@@ -1082,9 +1082,12 @@ func TestSave(t *testing.T) {
 		},
 	}
 	oldAtomicWrite := atomicWrite
+	oldLogFatalf := logFatalf
+	logFatalf = func(format string, args ...any) { panic(fmt.Sprintf(format, args...)) }
 	defer func() {
 		atomicWrite = oldAtomicWrite
 		jsonMarshal = json.Marshal
+		logFatalf = oldLogFatalf
 	}()
 	for _, test := range tests {
 		atomicWrite = oldAtomicWrite

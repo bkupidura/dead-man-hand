@@ -28,6 +28,7 @@ var (
 	atomicWrite = func(path string, data []byte, perm os.FileMode) error {
 		return renameio.WriteFile(path, data, perm)
 	}
+	logFatalf   = log.Fatalf
 	osChmod     = os.Chmod
 	jsonMarshal = json.Marshal
 	// httpClient is used for the outbound http connections.
@@ -413,14 +414,14 @@ func (s *State) DecryptAction(u string) (*Action, error) {
 }
 
 // save dumps state to disk.
-// save will panic when this is not possible.
+// save exits the process when this is not possible.
 // Caller must hold State lock.
 func (s *State) save() {
 	data, err := jsonMarshal(s.data)
 	if err != nil {
-		log.Panicf("unable to encode state: %s", err)
+		logFatalf("unable to encode state: %s", err)
 	}
 	if err := atomicWrite(s.savePath, data, 0600); err != nil {
-		log.Panicf("unable to dump state: %s", err)
+		logFatalf("unable to dump state: %s", err)
 	}
 }

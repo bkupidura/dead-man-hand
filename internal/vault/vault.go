@@ -22,6 +22,7 @@ var (
 	osChmod     = os.Chmod
 	cryptNewAge = crypt.NewAge
 	jsonMarshal = json.Marshal
+	logFatalf   = log.Fatalf
 )
 
 // ErrSecretNotReleased is returned when a secret exists but its release time has
@@ -231,14 +232,14 @@ func (v *Vault) ensureClientUUID(clientUUID string) {
 }
 
 // save dumps vault to disk.
-// save will panic when this is not possible.
+// save exits the process when this is not possible.
 // Caller must hold Vault lock.
 func (v *Vault) save() {
 	data, err := jsonMarshal(v.data)
 	if err != nil {
-		log.Panicf("unable to encode state: %s", err)
+		logFatalf("unable to encode state: %s", err)
 	}
 	if err := atomicWrite(v.savePath, data, 0600); err != nil {
-		log.Panicf("unable to dump state: %s", err)
+		logFatalf("unable to dump state: %s", err)
 	}
 }
