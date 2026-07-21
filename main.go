@@ -89,6 +89,7 @@ func main() {
 		DMHEnabled:      slices.Contains(enabledComponents, "dmh"),
 		VaultEnabled:    slices.Contains(enabledComponents, "vault"),
 		Debug:           k.Bool("debug"),
+		Metric:          m,
 	})
 
 	httpServer := &http.Server{

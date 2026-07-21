@@ -3,6 +3,7 @@ package api
 import (
 	"dmh/internal/auth"
 	"dmh/internal/execute"
+	"dmh/internal/metric"
 	"dmh/internal/state"
 	"dmh/internal/vault"
 )
@@ -22,4 +23,5 @@ type Options struct {
 	DMHEnabled      bool
 	VaultEnabled    bool
 	Debug           bool
+	Metric          *metric.PromCollector
 }

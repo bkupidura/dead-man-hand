@@ -47,6 +47,64 @@ func TestContextWithIdentity(t *testing.T) {
 	}
 }
 
+func TestEnsureIdentity(t *testing.T) {
+	tests := []struct {
+		inputIdentity *Identity
+	}{
+		{
+			inputIdentity: nil,
+		},
+		{
+			inputIdentity: &Identity{Name: "admin", Scopes: []string{"api"}},
+		},
+	}
+	for _, test := range tests {
+		req := httptest.NewRequest("GET", "/x", nil)
+		if test.inputIdentity != nil {
+			req = req.WithContext(ContextWithIdentity(req.Context(), test.inputIdentity))
+		}
+
+		gotReq, gotIdentity := ensureIdentity(req)
+
+		require.NotNil(t, gotIdentity)
+		require.Same(t, gotIdentity, IdentityFromContext(gotReq.Context()))
+		if test.inputIdentity != nil {
+			require.Same(t, test.inputIdentity, gotIdentity)
+		}
+	}
+}
+
+func TestSeedIdentity(t *testing.T) {
+	tests := []struct {
+		inputIdentity *Identity
+	}{
+		{
+			inputIdentity: nil,
+		},
+		{
+			inputIdentity: &Identity{Name: "admin", Scopes: []string{"api"}},
+		},
+	}
+	for _, test := range tests {
+		var gotIdentity *Identity
+		next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotIdentity = IdentityFromContext(r.Context())
+		})
+
+		req := httptest.NewRequest("GET", "/x", nil)
+		if test.inputIdentity != nil {
+			req = req.WithContext(ContextWithIdentity(req.Context(), test.inputIdentity))
+		}
+
+		SeedIdentity(next).ServeHTTP(httptest.NewRecorder(), req)
+
+		require.NotNil(t, gotIdentity)
+		if test.inputIdentity != nil {
+			require.Same(t, test.inputIdentity, gotIdentity)
+		}
+	}
+}
+
 func TestBearerFromHeader(t *testing.T) {
 	tests := []struct {
 		inputAuthorizationHeader string
@@ -82,19 +140,19 @@ func TestBearerAuthenticator(t *testing.T) {
 	}{
 		{
 			inputAuthorizationHeader: "",
-			expectedIdentity:         nil,
+			expectedIdentity:         &Identity{},
 		},
 		{
 			inputAuthorizationHeader: "Bearer example-bearer-token",
-			expectedIdentity:         &Identity{Name: "admin", Scopes: []string{"api"}},
+			expectedIdentity:         &Identity{Name: "admin", Scopes: []string{"api"}, Type: AuthTypeBearer},
 		},
 		{
 			inputAuthorizationHeader: "Bearer test-token",
-			expectedIdentity:         &Identity{Name: "alive-cron", Scopes: []string{"api:alive"}},
+			expectedIdentity:         &Identity{Name: "alive-cron", Scopes: []string{"api:alive"}, Type: AuthTypeBearer},
 		},
 		{
 			inputAuthorizationHeader: "Bearer unknown-token",
-			expectedIdentity:         nil,
+			expectedIdentity:         &Identity{Type: AuthTypeBearer, Reason: "invalid_token"},
 		},
 		{
 			inputAuthorizationHeader: "Bearer example-bearer-token",
@@ -128,19 +186,41 @@ func TestAuthorizer(t *testing.T) {
 		inputIdentity        *Identity
 		inputPath            string
 		expectedCode         int
+		expectedType         AuthType
+		expectedReason       string
 	}{
 		{
 			inputAnonymousScopes: []string{"healthz"},
+			inputIdentity:        &Identity{},
 			inputPath:            "/healthz",
 			expectedCode:         http.StatusOK,
+			expectedType:         AuthTypeAnonymous,
 		},
 		{
-			inputPath:    "/healthz",
-			expectedCode: http.StatusUnauthorized,
+			inputIdentity:  &Identity{},
+			inputPath:      "/healthz",
+			expectedCode:   http.StatusUnauthorized,
+			expectedReason: "missing_credentials",
 		},
 		{
-			inputPath:    "/api/action/store",
-			expectedCode: http.StatusUnauthorized,
+			inputIdentity:  &Identity{},
+			inputPath:      "/api/action/store",
+			expectedCode:   http.StatusUnauthorized,
+			expectedReason: "missing_credentials",
+		},
+		{
+			inputIdentity:  &Identity{Type: AuthTypeBearer, Reason: "invalid_token"},
+			inputPath:      "/api/action/store",
+			expectedCode:   http.StatusUnauthorized,
+			expectedType:   AuthTypeBearer,
+			expectedReason: "invalid_token",
+		},
+		{
+			inputIdentity:  &Identity{Type: AuthTypeSignedURL, Reason: "invalid_signature"},
+			inputPath:      "/api/action/store",
+			expectedCode:   http.StatusUnauthorized,
+			expectedType:   AuthTypeSignedURL,
+			expectedReason: "invalid_signature",
 		},
 		{
 			inputIdentity: &Identity{Name: "admin", Scopes: []string{"api"}},
@@ -148,9 +228,10 @@ func TestAuthorizer(t *testing.T) {
 			expectedCode:  http.StatusOK,
 		},
 		{
-			inputIdentity: &Identity{Name: "alive-cron", Scopes: []string{"api:alive"}},
-			inputPath:     "/api/action/store",
-			expectedCode:  http.StatusUnauthorized,
+			inputIdentity:  &Identity{Name: "alive-cron", Scopes: []string{"api:alive"}},
+			inputPath:      "/api/action/store",
+			expectedCode:   http.StatusUnauthorized,
+			expectedReason: "insufficient_scope",
 		},
 		{
 			inputIdentity: &Identity{Name: "alive-cron", Scopes: []string{"api:alive"}},
@@ -163,25 +244,38 @@ func TestAuthorizer(t *testing.T) {
 			expectedCode:  http.StatusOK,
 		},
 		{
-			inputIdentity: &Identity{Name: "dmh", Scopes: []string{"api:vault:store:uuid-A", "api:vault:alive:uuid-A"}},
-			inputPath:     "/api/vault/store/uuid-AB",
-			expectedCode:  http.StatusUnauthorized,
+			inputIdentity:  &Identity{Name: "dmh", Scopes: []string{"api:vault:store:uuid-A", "api:vault:alive:uuid-A"}},
+			inputPath:      "/api/vault/store/uuid-AB",
+			expectedCode:   http.StatusUnauthorized,
+			expectedReason: "insufficient_scope",
+		},
+		{
+			inputAnonymousScopes: []string{"healthz"},
+			inputIdentity:        &Identity{Type: AuthTypeBearer, Reason: "invalid_token"},
+			inputPath:            "/healthz",
+			expectedCode:         http.StatusOK,
+			expectedType:         AuthTypeAnonymous,
 		},
 		{
 			inputAnonymousScopes: []string{"healthz"},
 			inputIdentity:        &Identity{Name: "admin", Scopes: []string{"api"}},
 			inputPath:            "/",
 			expectedCode:         http.StatusUnauthorized,
+			expectedReason:       "insufficient_scope",
 		},
 		{
 			inputAnonymousScopes: []string{"healthz", "ready"},
+			inputIdentity:        &Identity{},
 			inputPath:            "/ready",
 			expectedCode:         http.StatusOK,
+			expectedType:         AuthTypeAnonymous,
 		},
 		{
 			inputAnonymousScopes: []string{"healthz", "ready"},
+			inputIdentity:        &Identity{},
 			inputPath:            "/metrics",
 			expectedCode:         http.StatusUnauthorized,
+			expectedReason:       "missing_credentials",
 		},
 		{
 			inputIdentity: &Identity{Name: "dmh", Scopes: []string{"api:vault:store:uuid-A", "api:vault:alive:uuid-A"}},
@@ -202,6 +296,8 @@ func TestAuthorizer(t *testing.T) {
 		handler.ServeHTTP(w, req)
 
 		require.Equal(t, test.expectedCode, w.Code, "path %s identity %+v", test.inputPath, test.inputIdentity)
+		require.Equal(t, test.expectedType, test.inputIdentity.Type, "path %s identity %+v", test.inputPath, test.inputIdentity)
+		require.Equal(t, test.expectedReason, test.inputIdentity.Reason, "path %s identity %+v", test.inputPath, test.inputIdentity)
 		if test.expectedCode == http.StatusUnauthorized {
 			require.Equal(t, `Bearer realm="dmh"`, w.Header().Get("WWW-Authenticate"))
 			require.JSONEq(t, `{"status":"Unauthorized."}`, w.Body.String())
@@ -216,7 +312,6 @@ func TestIdentityCovers(t *testing.T) {
 		expectedCovers bool
 	}{
 		{
-			// No identity covers nothing.
 			inputPath:      "/api/action/store",
 			expectedCovers: false,
 		},
@@ -236,7 +331,6 @@ func TestIdentityCovers(t *testing.T) {
 			expectedCovers: true,
 		},
 		{
-			// Any of the identity scopes covering is enough.
 			inputIdentity:  &Identity{Name: "multi", Scopes: []string{"metrics", "alive"}},
 			inputPath:      "/alive",
 			expectedCovers: true,
@@ -249,6 +343,11 @@ func TestIdentityCovers(t *testing.T) {
 		{
 			inputIdentity:  &Identity{Name: "empty", Scopes: []string{}},
 			inputPath:      "/alive",
+			expectedCovers: false,
+		},
+		{
+			inputIdentity:  &Identity{Type: AuthTypeBearer, Reason: "invalid_token", Scopes: []string{"api"}},
+			inputPath:      "/api/action/store",
 			expectedCovers: false,
 		},
 	}
@@ -311,17 +410,19 @@ func TestSignedURLAuthenticator(t *testing.T) {
 	}{
 		{
 			inputURL:         crypt.SignURL("test-secret", "/alive", time.Now().Add(time.Hour)),
-			expectedIdentity: &Identity{Name: "signed-url", Scopes: []string{"alive"}},
+			expectedIdentity: &Identity{Name: "signed-url", Scopes: []string{"alive"}, Type: AuthTypeSignedURL},
 		},
 		{
 			inputURL:         crypt.SignURL("test-secret", "/api/action/store", time.Now().Add(time.Hour)),
-			expectedIdentity: &Identity{Name: "signed-url", Scopes: []string{"api:action:store"}},
+			expectedIdentity: &Identity{Name: "signed-url", Scopes: []string{"api:action:store"}, Type: AuthTypeSignedURL},
 		},
 		{
-			inputURL: "/alive",
+			inputURL:         "/alive",
+			expectedIdentity: &Identity{},
 		},
 		{
-			inputURL: crypt.SignURL("wrong-secret", "/alive", time.Now().Add(time.Hour)),
+			inputURL:         crypt.SignURL("wrong-secret", "/alive", time.Now().Add(time.Hour)),
+			expectedIdentity: &Identity{Type: AuthTypeSignedURL, Reason: "invalid_signature"},
 		},
 		{
 			inputURL:         crypt.SignURL("test-secret", "/alive", time.Now().Add(time.Hour)),

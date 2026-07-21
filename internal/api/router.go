@@ -16,10 +16,14 @@ func NewRouter(opts *Options) *chi.Mux {
 	httpRouter := chi.NewRouter()
 
 	httpRouter.Group(func(r chi.Router) {
+		if opts.Auth.Enabled {
+			r.Use(auth.SeedIdentity)
+		}
 		r.Use(middleware.RequestLogger(apiLogFormatter{}))
 		r.Use(middleware.CleanPath)
 		r.Use(middleware.Recoverer)
 		r.Use(middleware.RequestSize(maxRequestBodyBytes))
+		r.Use(metricsMiddleware(opts.Metric))
 		if opts.Auth.Enabled {
 			r.Use(auth.BearerAuthenticator(opts.Auth.Bearer.Tokens))
 			r.Use(auth.SignedURLAuthenticator(opts.Auth.SignedURL.Secret))
