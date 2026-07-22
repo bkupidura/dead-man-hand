@@ -353,6 +353,7 @@ func getVaultSecretHandler(v vault.VaultInterface) func(http.ResponseWriter, *ht
 	return func(w http.ResponseWriter, r *http.Request) {
 		paramClientUUID := chi.URLParam(r, "clientUUID")
 		paramSecretUUID := chi.URLParam(r, "secretUUID")
+
 		s, err := v.GetSecret(paramClientUUID, paramSecretUUID)
 		if err != nil {
 			log.Printf("unable to get vault secret: %s", err)
@@ -363,6 +364,12 @@ func getVaultSecretHandler(v vault.VaultInterface) func(http.ResponseWriter, *ht
 			render.Render(w, r, StatusErrNotFound(nil))
 			return
 		}
+
+		if r.Method == http.MethodHead {
+			render.Render(w, r, StatusOK(http.StatusOK))
+			return
+		}
+
 		render.JSON(w, r, s)
 	}
 }

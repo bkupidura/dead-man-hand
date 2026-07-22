@@ -147,13 +147,15 @@ def lambda_handler(event, context):
 
         method = reqCtxHttp.get("method")
 
-        if method in ["GET", "DELETE"]:
+        if method in ["GET", "HEAD", "DELETE"]:
             if secret is None:
                 return http_not_found()
 
             if now - last_seen <= secret["processAfter"] * process_unit:
                 return http_locked()
 
+            if method == "HEAD":
+                return http_ok("OK")
             if method == "GET":
                 return http_ok(
                     {

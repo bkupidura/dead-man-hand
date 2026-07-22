@@ -65,7 +65,8 @@ func NewRouter(opts *Options) *chi.Mux {
 			})
 			r.Route("/api/vault/store", func(r chi.Router) {
 				r.Route("/{clientUUID}/{secretUUID}", func(r chi.Router) {
-					r.Get("/", getVaultSecretHandler(opts.Vault))
+					r.MethodFunc("GET", "/", getVaultSecretHandler(opts.Vault))
+					r.MethodFunc("HEAD", "/", getVaultSecretHandler(opts.Vault))
 					r.Post("/", addVaultSecretHandler(opts.Vault))
 					r.Delete("/", deleteVaultSecretHandler(opts.Vault))
 				})
