@@ -168,7 +168,7 @@ func (p *PromCollector) collectSlow() {
 						continue
 					}
 
-					req, err := http.NewRequest("GET", secretUrl, nil)
+					req, err := http.NewRequest(http.MethodHead, secretUrl, nil)
 					if err != nil {
 						p.dmhMissingSecretsTotal.WithLabelValues(a.UUID).Add(1)
 						continue

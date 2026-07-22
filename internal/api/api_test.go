@@ -846,6 +846,7 @@ func TestGetVaultSecretHandler(t *testing.T) {
 	tests := []struct {
 		inputClientUUID  string
 		inputSecretUUID  string
+		inputMethod      string
 		mockVaultFunc    func() vault.VaultInterface
 		expectedCode     int
 		expectedResponse *vault.Secret
@@ -853,6 +854,7 @@ func TestGetVaultSecretHandler(t *testing.T) {
 		{
 			inputClientUUID: "client-uuid",
 			inputSecretUUID: "secret-uuid",
+			inputMethod:     "GET",
 			mockVaultFunc: func() vault.VaultInterface {
 				v := new(mockVault)
 				v.On("GetSecret", "client-uuid", "secret-uuid").Return(nil, fmt.Errorf("mockVault error"))
@@ -863,6 +865,18 @@ func TestGetVaultSecretHandler(t *testing.T) {
 		{
 			inputClientUUID: "client-uuid",
 			inputSecretUUID: "secret-uuid",
+			inputMethod:     "HEAD",
+			mockVaultFunc: func() vault.VaultInterface {
+				v := new(mockVault)
+				v.On("GetSecret", "client-uuid", "secret-uuid").Return(nil, fmt.Errorf("mockVault error"))
+				return v
+			},
+			expectedCode: http.StatusNotFound,
+		},
+		{
+			inputClientUUID: "client-uuid",
+			inputSecretUUID: "secret-uuid",
+			inputMethod:     "GET",
 			mockVaultFunc: func() vault.VaultInterface {
 				v := new(mockVault)
 				v.On("GetSecret", "client-uuid", "secret-uuid").Return(nil, fmt.Errorf("secret client-uuid/secret-uuid %w", vault.ErrSecretNotReleased))
@@ -874,6 +888,19 @@ func TestGetVaultSecretHandler(t *testing.T) {
 		{
 			inputClientUUID: "client-uuid",
 			inputSecretUUID: "secret-uuid",
+			inputMethod:     "HEAD",
+			mockVaultFunc: func() vault.VaultInterface {
+				v := new(mockVault)
+				v.On("GetSecret", "client-uuid", "secret-uuid").Return(nil, fmt.Errorf("secret client-uuid/secret-uuid %w", vault.ErrSecretNotReleased))
+				return v
+			},
+			expectedCode:     http.StatusLocked,
+			expectedResponse: nil,
+		},
+		{
+			inputClientUUID: "client-uuid",
+			inputSecretUUID: "secret-uuid",
+			inputMethod:     "GET",
 			mockVaultFunc: func() vault.VaultInterface {
 				v := new(mockVault)
 				v.On("GetSecret", "client-uuid", "secret-uuid").Return(&vault.Secret{Key: "test", ProcessAfter: 10}, nil)
@@ -882,9 +909,20 @@ func TestGetVaultSecretHandler(t *testing.T) {
 			expectedCode:     http.StatusOK,
 			expectedResponse: &vault.Secret{Key: "test", ProcessAfter: 10},
 		},
+		{
+			inputClientUUID: "client-uuid",
+			inputSecretUUID: "secret-uuid",
+			inputMethod:     "HEAD",
+			mockVaultFunc: func() vault.VaultInterface {
+				v := new(mockVault)
+				v.On("GetSecret", "client-uuid", "secret-uuid").Return(&vault.Secret{Key: "test", ProcessAfter: 10}, nil)
+				return v
+			},
+			expectedCode: http.StatusOK,
+		},
 	}
 	for _, test := range tests {
-		req, err := http.NewRequest("GET", fmt.Sprintf("/api/vault/store/%s/%s", test.inputClientUUID, test.inputSecretUUID), nil)
+		req, err := http.NewRequest(test.inputMethod, fmt.Sprintf("/api/vault/store/%s/%s", test.inputClientUUID, test.inputSecretUUID), nil)
 		require.Nil(t, err)
 
 		ctx := chi.NewRouteContext()
@@ -904,10 +942,14 @@ func TestGetVaultSecretHandler(t *testing.T) {
 		require.Equal(t, "application/json", contentType)
 
 		if test.expectedCode < 300 {
-			var response *vault.Secret
-			err = json.Unmarshal(w.Body.Bytes(), &response)
-			require.Nil(t, err)
-			require.Equal(t, test.expectedResponse, response)
+			if test.inputMethod == "HEAD" {
+				require.JSONEq(t, `{"status":"success"}`, w.Body.String())
+			} else {
+				var response *vault.Secret
+				err = json.Unmarshal(w.Body.Bytes(), &response)
+				require.Nil(t, err)
+				require.Equal(t, test.expectedResponse, response)
+			}
 		}
 
 	}

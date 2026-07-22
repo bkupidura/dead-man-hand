@@ -281,6 +281,25 @@ func TestNewRouter(t *testing.T) {
 		{
 			inputOptions: func() *Options {
 				v := new(mockVault)
+				v.On("GetSecret", "client-uuid", "secret-uuid").Return(&vault.Secret{Key: "test", ProcessAfter: 10}, nil)
+				return &Options{Vault: v, VaultEnabled: true}
+			},
+			method:     "HEAD",
+			path:       "/api/vault/store/client-uuid/secret-uuid",
+			statusCode: http.StatusOK,
+		},
+		{
+			inputOptions: func() *Options {
+				v := new(mockVault)
+				return &Options{Vault: v, VaultEnabled: false}
+			},
+			method:     "HEAD",
+			path:       "/api/vault/store/client-uuid/secret-uuid",
+			statusCode: http.StatusNotFound,
+		},
+		{
+			inputOptions: func() *Options {
+				v := new(mockVault)
 				return &Options{Vault: v, VaultEnabled: true}
 			},
 			method:     "POST",
