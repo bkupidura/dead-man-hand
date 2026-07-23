@@ -15,11 +15,6 @@ func pathSegments(urlPath string) []string {
 	return segments(urlPath, '/')
 }
 
-// scopeSegments splits scope into segments.
-func scopeSegments(scope string) []string {
-	return segments(scope, ':')
-}
-
 // pathScope converts URL path into scope notation (segments joined by ':').
 func pathScope(urlPath string) string {
 	return strings.Join(pathSegments(urlPath), ":")
@@ -31,7 +26,7 @@ func pathScope(urlPath string) string {
 // but not /api/vault/store/uuid-AB.
 // Empty scope (no segments) covers nothing - default deny.
 func scopeCovers(scope string, path []string) bool {
-	scopeSegs := scopeSegments(scope)
+	scopeSegs := segments(scope, ':')
 	if len(scopeSegs) == 0 || len(scopeSegs) > len(path) {
 		return false
 	}

@@ -6,33 +6,9 @@ import (
 
 	"dmh/internal/auth"
 	"dmh/internal/metric"
+
+	"github.com/go-chi/chi/v5/middleware"
 )
-
-// statusRecorder captures the response status code written by the handler.
-type statusRecorder struct {
-	http.ResponseWriter
-	status int
-}
-
-func (s *statusRecorder) WriteHeader(code int) {
-	s.status = code
-	s.ResponseWriter.WriteHeader(code)
-}
-
-func (s *statusRecorder) Write(b []byte) (int, error) {
-	if s.status == 0 {
-		s.status = http.StatusOK
-	}
-	return s.ResponseWriter.Write(b)
-}
-
-// Flush forwards to the underlying writer so streaming endpoints (e.g. /metrics)
-// keep working through this recorder.
-func (s *statusRecorder) Flush() {
-	if f, ok := s.ResponseWriter.(http.Flusher); ok {
-		f.Flush()
-	}
-}
 
 // metricsMiddleware records HTTP and auth metrics.
 // It only reads the outcome, never builds it: Identity is seeded upstream by
@@ -49,11 +25,11 @@ func metricsMiddleware(p *metric.PromCollector) func(http.Handler) http.Handler 
 
 			start := time.Now()
 			id := auth.IdentityFromContext(r.Context())
-			rec := &statusRecorder{ResponseWriter: w}
+			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 
-			next.ServeHTTP(rec, r)
+			next.ServeHTTP(ww, r)
 
-			status := rec.status
+			status := ww.Status()
 			if status == 0 {
 				status = http.StatusOK
 			}

@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"dmh/internal/crypt"
+
+	"github.com/go-chi/render"
 )
 
 type contextKey int
@@ -140,9 +142,8 @@ func Authorizer(anonymousScopes []string) func(http.Handler) http.Handler {
 			}
 
 			w.Header().Set("WWW-Authenticate", `Bearer realm="dmh"`)
-			w.Header().Set("Content-Type", "application/json; charset=utf-8")
-			w.WriteHeader(http.StatusUnauthorized)
-			w.Write([]byte(`{"status":"Unauthorized."}` + "\n"))
+			render.Status(r, http.StatusUnauthorized)
+			render.JSON(w, r, map[string]string{"status": "Unauthorized."})
 		})
 	}
 }

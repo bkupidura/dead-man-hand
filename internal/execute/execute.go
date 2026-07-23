@@ -46,8 +46,9 @@ func New(opts *Options) (ExecuteInterface, error) {
 
 // Run will execute Action).
 func (e *Execute) Run(a *state.Action) error {
-	e.expandSigAuth(a)
-	data, err := UnmarshalActionData(a)
+	action := *a
+	e.expandSigAuth(&action)
+	data, err := UnmarshalActionData(&action)
 	if err != nil {
 		return err
 	}
