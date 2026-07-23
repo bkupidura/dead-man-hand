@@ -17,6 +17,7 @@ Required services:
 3. Create HTTP AWS API Gateway
 4. Create below routes in AWS API Gateway:
   - GET `/api/vault/store/{client_uuid}/{secret_uuid}`
+  - HEAD `/api/vault/store/{client_uuid}/{secret_uuid}`
   - DELETE `/api/vault/store/{client_uuid}/{secret_uuid}`
   - POST `/api/vault/store/{client_uuid}/{secret_uuid}`
   - GET  `/api/vault/alive/{client_uuid}`

@@ -181,13 +181,17 @@ def lambda_handler(event, context):
             if "key" not in request_data or "process_after" not in request_data:
                 return http_not_found()
 
-            secrets_table.put_item(
-                Item={
-                    "clientUUID": client_uuid,
-                    "secretUUID": secret_uuid,
-                    "key": request_data["key"],
-                    "processAfter": request_data["process_after"],
-                }
-            )
+            try:
+                secrets_table.put_item(
+                    Item={
+                        "clientUUID": client_uuid,
+                        "secretUUID": secret_uuid,
+                        "key": request_data["key"],
+                        "processAfter": request_data["process_after"],
+                    },
+                    ConditionExpression="attribute_not_exists(clientUUID) AND attribute_not_exists(secretUUID)",
+                )
+            except secrets_table.meta.client.exceptions.ConditionalCheckFailedException:
+                return http_not_found()
 
             return http_created()

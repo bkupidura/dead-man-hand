@@ -804,7 +804,8 @@ func TestDMHAuthInvalid(t *testing.T) {
 	defer func() { metricInitialize = oldMetricInitialize }()
 
 	tests := []struct {
-		inputAuthConfig string
+		inputAuthConfig   string
+		expectedLogSubstr string
 	}{
 		{
 			inputAuthConfig: `
@@ -814,11 +815,13 @@ func TestDMHAuthInvalid(t *testing.T) {
             hash: not-a-hash
             scope:
               - api`,
+			expectedLogSubstr: "invalid auth config",
 		},
 		{
 			inputAuthConfig: `
       bearer:
         token: 10`,
+			expectedLogSubstr: "unable to unmarshal config",
 		},
 	}
 	for _, test := range tests {
@@ -835,6 +838,418 @@ func TestDMHAuthInvalid(t *testing.T) {
 		require.Nil(t, err)
 		f.Close()
 
+		logBuf := &syncBuffer{}
+		log.SetOutput(logBuf)
+		defer log.SetOutput(os.Stderr)
+
 		require.Panics(t, main)
+		require.Contains(t, logBuf.String(), test.expectedLogSubstr)
 	}
+}
+
+func TestDMHMissingComponentsKey(t *testing.T) {
+	configFile := "integration_test_missing_components_config.yaml"
+	defer os.Remove(configFile)
+
+	f, err := os.Create(configFile)
+	require.Nil(t, err)
+	_, err = f.WriteString(`debug: false`)
+	require.Nil(t, err)
+	f.Close()
+
+	err = os.Setenv("DMH_CONFIG_FILE", configFile)
+	require.Nil(t, err)
+	defer os.Unsetenv("DMH_CONFIG_FILE")
+
+	oldHTTPPort := api.HTTPPort
+	api.HTTPPort = 18083
+	defer func() { api.HTTPPort = oldHTTPPort }()
+
+	oldMetricInitialize := metricInitialize
+	metricInitialize = func(opts *metric.Options) *metric.PromCollector {
+		opts.Registry = prometheus.NewRegistry()
+		return metric.Initialize(opts)
+	}
+	defer func() { metricInitialize = oldMetricInitialize }()
+
+	logBuf := &syncBuffer{}
+	log.SetOutput(logBuf)
+	defer log.SetOutput(os.Stderr)
+
+	require.Panics(t, main)
+	require.Contains(t, logBuf.String(), "required config key components is not defined")
+}
+
+func TestDMHEmptyComponents(t *testing.T) {
+	configFile := "integration_test_empty_components_config.yaml"
+	defer os.Remove(configFile)
+
+	f, err := os.Create(configFile)
+	require.Nil(t, err)
+	_, err = f.WriteString(`components: []`)
+	require.Nil(t, err)
+	f.Close()
+
+	err = os.Setenv("DMH_CONFIG_FILE", configFile)
+	require.Nil(t, err)
+	defer os.Unsetenv("DMH_CONFIG_FILE")
+
+	oldHTTPPort := api.HTTPPort
+	api.HTTPPort = 18084
+	defer func() { api.HTTPPort = oldHTTPPort }()
+
+	oldMetricInitialize := metricInitialize
+	metricInitialize = func(opts *metric.Options) *metric.PromCollector {
+		opts.Registry = prometheus.NewRegistry()
+		return metric.Initialize(opts)
+	}
+	defer func() { metricInitialize = oldMetricInitialize }()
+
+	logBuf := &syncBuffer{}
+	log.SetOutput(logBuf)
+	defer log.SetOutput(os.Stderr)
+
+	require.Panics(t, main)
+	require.Contains(t, logBuf.String(), "required config key components cant be empty")
+}
+
+func TestDMHConfigFileEnvUnset(t *testing.T) {
+	require.NoFileExists(t, "config.yaml")
+
+	err := os.Unsetenv("DMH_CONFIG_FILE")
+	require.Nil(t, err)
+
+	oldHTTPPort := api.HTTPPort
+	api.HTTPPort = 18085
+	defer func() { api.HTTPPort = oldHTTPPort }()
+
+	oldMetricInitialize := metricInitialize
+	metricInitialize = func(opts *metric.Options) *metric.PromCollector {
+		opts.Registry = prometheus.NewRegistry()
+		return metric.Initialize(opts)
+	}
+	defer func() { metricInitialize = oldMetricInitialize }()
+
+	logBuf := &syncBuffer{}
+	log.SetOutput(logBuf)
+	defer log.SetOutput(os.Stderr)
+
+	require.Panics(t, main)
+	require.Contains(t, logBuf.String(), "error loading config config.yaml")
+}
+
+func TestDMHInvalidStateConfig(t *testing.T) {
+	configFile := "integration_test_invalid_state_config.yaml"
+	defer os.Remove(configFile)
+
+	f, err := os.Create(configFile)
+	require.Nil(t, err)
+	_, err = f.WriteString(`
+    components:
+      - dmh
+    auth:
+      enabled: false
+    remote_vault:
+      url: http://127.0.0.1:8080
+      client_uuid: test-client-uuid
+      token: test-token
+    `)
+	require.Nil(t, err)
+	f.Close()
+
+	err = os.Setenv("DMH_CONFIG_FILE", configFile)
+	require.Nil(t, err)
+	defer os.Unsetenv("DMH_CONFIG_FILE")
+
+	oldHTTPPort := api.HTTPPort
+	api.HTTPPort = 18086
+	defer func() { api.HTTPPort = oldHTTPPort }()
+
+	oldMetricInitialize := metricInitialize
+	metricInitialize = func(opts *metric.Options) *metric.PromCollector {
+		opts.Registry = prometheus.NewRegistry()
+		return metric.Initialize(opts)
+	}
+	defer func() { metricInitialize = oldMetricInitialize }()
+
+	logBuf := &syncBuffer{}
+	log.SetOutput(logBuf)
+	defer log.SetOutput(os.Stderr)
+
+	require.Panics(t, main)
+	require.Contains(t, logBuf.String(), "invalid dmh config")
+	require.Contains(t, logBuf.String(), "state.file is required")
+}
+
+func TestDMHInvalidVaultConfig(t *testing.T) {
+	vaultFile := "integration_test_invalid_vault_config_vault.json"
+	configFile := "integration_test_invalid_vault_config.yaml"
+	defer os.Remove(vaultFile)
+	defer os.Remove(configFile)
+
+	f, err := os.Create(configFile)
+	require.Nil(t, err)
+	_, err = f.WriteString(fmt.Sprintf(`
+    components:
+      - vault
+    auth:
+      enabled: false
+    vault:
+      key: not-a-valid-age-key
+      file: %s
+    `, vaultFile))
+	require.Nil(t, err)
+	f.Close()
+
+	err = os.Setenv("DMH_CONFIG_FILE", configFile)
+	require.Nil(t, err)
+	defer os.Unsetenv("DMH_CONFIG_FILE")
+
+	oldHTTPPort := api.HTTPPort
+	api.HTTPPort = 18087
+	defer func() { api.HTTPPort = oldHTTPPort }()
+
+	oldMetricInitialize := metricInitialize
+	metricInitialize = func(opts *metric.Options) *metric.PromCollector {
+		opts.Registry = prometheus.NewRegistry()
+		return metric.Initialize(opts)
+	}
+	defer func() { metricInitialize = oldMetricInitialize }()
+
+	logBuf := &syncBuffer{}
+	log.SetOutput(logBuf)
+	defer log.SetOutput(os.Stderr)
+
+	require.Panics(t, main)
+	require.Contains(t, logBuf.String(), "invalid vault config")
+	require.Contains(t, logBuf.String(), "vault.key must be a valid age private key")
+}
+
+func TestDMHInvalidBulkSMSConfig(t *testing.T) {
+	stateFile := "integration_test_invalid_bulksms_state.json"
+	configFile := "integration_test_invalid_bulksms_config.yaml"
+
+	tests := []struct {
+		inputBulkSMSConf  string
+		expectedLogSubstr string
+	}{
+		{
+			inputBulkSMSConf: `
+          token: not-a-map-value`,
+			expectedLogSubstr: "unable to unmarshal config",
+		},
+		{
+			inputBulkSMSConf: `
+          routing_group: invalid`,
+			expectedLogSubstr: "invalid execute.plugin.bulksms config",
+		},
+	}
+	for _, test := range tests {
+		defer os.Remove(stateFile)
+		defer os.Remove(configFile)
+
+		f, err := os.Create(configFile)
+		require.Nil(t, err)
+		_, err = f.WriteString(fmt.Sprintf(`
+    components:
+      - dmh
+    auth:
+      enabled: false
+    state:
+      file: %s
+    remote_vault:
+      url: http://127.0.0.1:8080
+      client_uuid: test-client-uuid
+      token: test-token
+    execute:
+      plugin:
+        bulksms:%s
+    `, stateFile, test.inputBulkSMSConf))
+		require.Nil(t, err)
+		f.Close()
+
+		err = os.Setenv("DMH_CONFIG_FILE", configFile)
+		require.Nil(t, err)
+		defer os.Unsetenv("DMH_CONFIG_FILE")
+
+		oldHTTPPort := api.HTTPPort
+		api.HTTPPort = 18088
+		defer func() { api.HTTPPort = oldHTTPPort }()
+
+		oldMetricInitialize := metricInitialize
+		metricInitialize = func(opts *metric.Options) *metric.PromCollector {
+			opts.Registry = prometheus.NewRegistry()
+			return metric.Initialize(opts)
+		}
+		defer func() { metricInitialize = oldMetricInitialize }()
+
+		logBuf := &syncBuffer{}
+		log.SetOutput(logBuf)
+		defer log.SetOutput(os.Stderr)
+
+		require.Panics(t, main)
+		require.Contains(t, logBuf.String(), test.expectedLogSubstr)
+	}
+}
+
+func TestDMHInvalidMailConfig(t *testing.T) {
+	stateFile := "integration_test_invalid_mail_state.json"
+	configFile := "integration_test_invalid_mail_config.yaml"
+
+	tests := []struct {
+		inputMailConf     string
+		expectedLogSubstr string
+	}{
+		{
+			inputMailConf: `
+          server: [1, 2, 3]`,
+			expectedLogSubstr: "unable to unmarshal config",
+		},
+		{
+			inputMailConf: `
+          from: test@example.com`,
+			expectedLogSubstr: "invalid execute.plugin.mail config",
+		},
+	}
+	for _, test := range tests {
+		defer os.Remove(stateFile)
+		defer os.Remove(configFile)
+
+		f, err := os.Create(configFile)
+		require.Nil(t, err)
+		_, err = f.WriteString(fmt.Sprintf(`
+    components:
+      - dmh
+    auth:
+      enabled: false
+    state:
+      file: %s
+    remote_vault:
+      url: http://127.0.0.1:8080
+      client_uuid: test-client-uuid
+      token: test-token
+    execute:
+      plugin:
+        mail:%s
+    `, stateFile, test.inputMailConf))
+		require.Nil(t, err)
+		f.Close()
+
+		err = os.Setenv("DMH_CONFIG_FILE", configFile)
+		require.Nil(t, err)
+		defer os.Unsetenv("DMH_CONFIG_FILE")
+
+		oldHTTPPort := api.HTTPPort
+		api.HTTPPort = 18089
+		defer func() { api.HTTPPort = oldHTTPPort }()
+
+		oldMetricInitialize := metricInitialize
+		metricInitialize = func(opts *metric.Options) *metric.PromCollector {
+			opts.Registry = prometheus.NewRegistry()
+			return metric.Initialize(opts)
+		}
+		defer func() { metricInitialize = oldMetricInitialize }()
+
+		logBuf := &syncBuffer{}
+		log.SetOutput(logBuf)
+		defer log.SetOutput(os.Stderr)
+
+		require.Panics(t, main)
+		require.Contains(t, logBuf.String(), test.expectedLogSubstr)
+	}
+}
+
+func TestDMHStateFileCorrupt(t *testing.T) {
+	stateFile := "integration_test_corrupt_state.json"
+	configFile := "integration_test_corrupt_state_config.yaml"
+	defer os.Remove(stateFile)
+	defer os.Remove(configFile)
+
+	err := os.WriteFile(stateFile, []byte("not valid json"), 0644)
+	require.Nil(t, err)
+
+	f, err := os.Create(configFile)
+	require.Nil(t, err)
+	_, err = f.WriteString(fmt.Sprintf(`
+    components:
+      - dmh
+    auth:
+      enabled: false
+    state:
+      file: %s
+    remote_vault:
+      url: http://127.0.0.1:8080
+      client_uuid: test-client-uuid
+      token: test-token
+    `, stateFile))
+	require.Nil(t, err)
+	f.Close()
+
+	err = os.Setenv("DMH_CONFIG_FILE", configFile)
+	require.Nil(t, err)
+	defer os.Unsetenv("DMH_CONFIG_FILE")
+
+	oldHTTPPort := api.HTTPPort
+	api.HTTPPort = 18090
+	defer func() { api.HTTPPort = oldHTTPPort }()
+
+	oldMetricInitialize := metricInitialize
+	metricInitialize = func(opts *metric.Options) *metric.PromCollector {
+		opts.Registry = prometheus.NewRegistry()
+		return metric.Initialize(opts)
+	}
+	defer func() { metricInitialize = oldMetricInitialize }()
+
+	logBuf := &syncBuffer{}
+	log.SetOutput(logBuf)
+	defer log.SetOutput(os.Stderr)
+
+	require.Panics(t, main)
+	require.Contains(t, logBuf.String(), "unable to create state")
+}
+
+func TestDMHVaultFileCorrupt(t *testing.T) {
+	vaultFile := "integration_test_corrupt_vault.json"
+	configFile := "integration_test_corrupt_vault_config.yaml"
+	defer os.Remove(vaultFile)
+	defer os.Remove(configFile)
+
+	err := os.WriteFile(vaultFile, []byte("not valid json"), 0644)
+	require.Nil(t, err)
+
+	f, err := os.Create(configFile)
+	require.Nil(t, err)
+	_, err = f.WriteString(fmt.Sprintf(`
+    components:
+      - vault
+    auth:
+      enabled: false
+    vault:
+      key: AGE-SECRET-KEY-1GEUMZFAZD42WGZFGATTTJHV4SURK8LU507QVCAKXKJP6UTFMJTCS0E3QJ4
+      file: %s
+    `, vaultFile))
+	require.Nil(t, err)
+	f.Close()
+
+	err = os.Setenv("DMH_CONFIG_FILE", configFile)
+	require.Nil(t, err)
+	defer os.Unsetenv("DMH_CONFIG_FILE")
+
+	oldHTTPPort := api.HTTPPort
+	api.HTTPPort = 18091
+	defer func() { api.HTTPPort = oldHTTPPort }()
+
+	oldMetricInitialize := metricInitialize
+	metricInitialize = func(opts *metric.Options) *metric.PromCollector {
+		opts.Registry = prometheus.NewRegistry()
+		return metric.Initialize(opts)
+	}
+	defer func() { metricInitialize = oldMetricInitialize }()
+
+	logBuf := &syncBuffer{}
+	log.SetOutput(logBuf)
+	defer log.SetOutput(os.Stderr)
+
+	require.Panics(t, main)
+	require.Contains(t, logBuf.String(), "unable to create vault")
 }
