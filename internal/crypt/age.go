@@ -9,8 +9,9 @@ import (
 	"filippo.io/age"
 )
 
+const EncryptionKind = "X25519"
+
 var (
-	EncryptionKind = "X25519"
 	// mocks for tests
 	ageGenerateX25519Identity = age.GenerateX25519Identity
 	ageEncrypt                = age.Encrypt
