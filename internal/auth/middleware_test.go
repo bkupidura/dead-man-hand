@@ -9,8 +9,18 @@ import (
 
 	"dmh/internal/crypt"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/stretchr/testify/require"
 )
+
+// withRouteContext attaches an empty chi RouteContext to req, mirroring what
+// chi.Mux.ServeHTTP does before running its middleware chain, so tests can run
+// the real middleware.CleanPath instead of hand-simulating its output.
+func withRouteContext(req *http.Request) *http.Request {
+	rctx := chi.NewRouteContext()
+	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+}
 
 func TestIdentityFromContext(t *testing.T) {
 	tests := []struct {
@@ -282,13 +292,19 @@ func TestAuthorizer(t *testing.T) {
 			inputPath:     "/api/vault/alive/uuid-A",
 			expectedCode:  http.StatusOK,
 		},
+		{
+			inputIdentity:  &Identity{Name: "dmh", Scopes: []string{"api:action:store:uuid-A"}},
+			inputPath:      "/api/action/store/uuid-A/../uuid-B",
+			expectedCode:   http.StatusUnauthorized,
+			expectedReason: "insufficient_scope",
+		},
 	}
 	for _, test := range tests {
-		handler := Authorizer(test.inputAnonymousScopes)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler := middleware.CleanPath(Authorizer(test.inputAnonymousScopes)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
-		}))
+		})))
 
-		req := httptest.NewRequest("GET", test.inputPath, nil)
+		req := withRouteContext(httptest.NewRequest("GET", test.inputPath, nil))
 		if test.inputIdentity != nil {
 			req = req.WithContext(ContextWithIdentity(req.Context(), test.inputIdentity))
 		}
@@ -388,7 +404,6 @@ func TestMiddlewareChain(t *testing.T) {
 		{inputURL: "/metrics", inputToken: token.Plaintext, expectedCode: http.StatusUnauthorized},
 		{inputURL: crypt.SignURL(secret, "/api/vault/store/uuid", time.Now().Add(time.Hour)), expectedCode: http.StatusOK},
 		{inputURL: crypt.SignURL("wrong-secret", "/api/vault/store/uuid", time.Now().Add(time.Hour)), expectedCode: http.StatusUnauthorized},
-		// bearer identity is resolved first and never overwritten, its scopes dont cover vault
 		{inputURL: crypt.SignURL(secret, "/api/vault/store/uuid", time.Now().Add(time.Hour)), inputToken: token.Plaintext, expectedCode: http.StatusUnauthorized},
 	}
 	for _, test := range tests {
@@ -429,6 +444,10 @@ func TestSignedURLAuthenticator(t *testing.T) {
 			inputIdentity:    &Identity{Name: "bearer", Scopes: []string{"api"}},
 			expectedIdentity: &Identity{Name: "bearer", Scopes: []string{"api"}},
 		},
+		{
+			inputURL:         "/wrong/../alive" + crypt.SignURL("test-secret", "/alive", time.Now().Add(time.Hour))[len("/alive"):],
+			expectedIdentity: &Identity{Name: "signed-url", Scopes: []string{"alive"}, Type: AuthTypeSignedURL},
+		},
 	}
 
 	for _, test := range tests {
@@ -437,16 +456,55 @@ func TestSignedURLAuthenticator(t *testing.T) {
 			gotIdentity = IdentityFromContext(r.Context())
 			w.WriteHeader(http.StatusOK)
 		})
+		handler := middleware.CleanPath(SignedURLAuthenticator("test-secret")(next))
 
 		req, err := http.NewRequest("GET", test.inputURL, nil)
 		require.Nil(t, err)
+		req = withRouteContext(req)
 		if test.inputIdentity != nil {
 			req = req.WithContext(ContextWithIdentity(req.Context(), test.inputIdentity))
 		}
 		w := httptest.NewRecorder()
 
-		SignedURLAuthenticator("test-secret")(next).ServeHTTP(w, req)
+		handler.ServeHTTP(w, req)
 
 		require.Equal(t, test.expectedIdentity, gotIdentity, "url %s", test.inputURL)
+	}
+}
+
+func TestRequestPath(t *testing.T) {
+	tests := []struct {
+		inputSetRouteContext bool
+		inputRoutePath       string
+		inputURLPath         string
+		expectedPath         string
+	}{
+		{
+			inputSetRouteContext: false,
+			inputURLPath:         "/api/action",
+			expectedPath:         "/api/action",
+		},
+		{
+			inputSetRouteContext: true,
+			inputRoutePath:       "",
+			inputURLPath:         "/api/action",
+			expectedPath:         "/api/action",
+		},
+		{
+			inputSetRouteContext: true,
+			inputRoutePath:       "/api/action/store/uuid-B",
+			inputURLPath:         "/api/action/store/uuid-A/../uuid-B",
+			expectedPath:         "/api/action/store/uuid-B",
+		},
+	}
+	for _, test := range tests {
+		req := httptest.NewRequest("GET", test.inputURLPath, nil)
+		if test.inputSetRouteContext {
+			rctx := chi.NewRouteContext()
+			rctx.RoutePath = test.inputRoutePath
+			req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+		}
+
+		require.Equal(t, test.expectedPath, requestPath(req))
 	}
 }

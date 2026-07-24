@@ -40,20 +40,6 @@ func TestPathSegments(t *testing.T) {
 	}
 }
 
-func TestScopeSegments(t *testing.T) {
-	tests := []struct {
-		inputScope       string
-		expectedSegments []string
-	}{
-		{inputScope: "", expectedSegments: []string{}},
-		{inputScope: "api", expectedSegments: []string{"api"}},
-		{inputScope: "api:action:store", expectedSegments: []string{"api", "action", "store"}},
-	}
-	for _, test := range tests {
-		require.Equal(t, test.expectedSegments, scopeSegments(test.inputScope))
-	}
-}
-
 func TestPathScope(t *testing.T) {
 	tests := []struct {
 		inputPath     string

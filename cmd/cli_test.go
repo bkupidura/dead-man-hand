@@ -478,6 +478,17 @@ func TestLoadActionsFromFile(t *testing.T) {
 `,
 			expectedError: "action #1: process_after should be greater than 0",
 		},
+		{
+			inputFile: "testdata/load-invalid-second-action.yaml",
+			fileContent: `- kind: dummy
+  data: '{"message": "test"}'
+  process_after: 10
+- kind: dummy
+  data: '{"message": "test"}'
+  process_after: 0
+`,
+			expectedError: "action #2: process_after should be greater than 0",
+		},
 	}
 
 	os.MkdirAll("testdata", 0755)
@@ -1002,6 +1013,16 @@ func TestProcessActionsFromFile(t *testing.T) {
 			inputFile:    "testdata/process-all-success.yaml",
 			fileContent:  twoActionsYAML,
 			expectedSent: 2,
+		},
+		{
+			inputFile: "testdata/process-single-failure.yaml",
+			fileContent: `- kind: test
+  data: '{"test": true}'
+  process_after: 10
+`,
+			failFirstSend: true,
+			expectedError: "1 of 1 actions failed",
+			expectedSent:  1,
 		},
 	}
 
