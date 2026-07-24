@@ -7,6 +7,7 @@ import (
 
 	"dmh/internal/crypt"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 )
 
@@ -106,9 +107,10 @@ func SignedURLAuthenticator(secret string) func(http.Handler) http.Handler {
 				if query.Get("e") != "" || query.Get("s") != "" {
 					id.Type = AuthTypeSignedURL
 					id.Reason = "invalid_signature"
-					if crypt.ValidateSignedURL(secret, r.URL.Path, query.Get("e"), query.Get("s")) {
+					path := requestPath(r)
+					if crypt.ValidateSignedURL(secret, path, query.Get("e"), query.Get("s")) {
 						id.Name = "signed-url"
-						id.Scopes = []string{pathScope(r.URL.Path)}
+						id.Scopes = []string{pathScope(path)}
 						id.Reason = ""
 					}
 				}
@@ -118,14 +120,25 @@ func SignedURLAuthenticator(secret string) func(http.Handler) http.Handler {
 	}
 }
 
+// requestPath returns the path chi's router dispatches this request on
+// (cleaned by middleware.CleanPath), falling back to r.URL.Path when chi
+// hasn't set one.
+func requestPath(r *http.Request) string {
+	if rctx := chi.RouteContext(r.Context()); rctx != nil && rctx.RoutePath != "" {
+		return rctx.RoutePath
+	}
+	return r.URL.Path
+}
+
 // Authorizer returns middleware enforcing scope based authorization (default deny).
 // Request is allowed when its path is covered by anonymous scope or Identity scope.
 func Authorizer(anonymousScopes []string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			r, id := ensureIdentity(r)
+			path := requestPath(r)
 
-			if anyScopeCovers(anonymousScopes, pathSegments(r.URL.Path)) || IdentityCovers(r, r.URL.Path) {
+			if anyScopeCovers(anonymousScopes, pathSegments(path)) || IdentityCovers(r, path) {
 				if id.Name == "" {
 					id.Type = AuthTypeAnonymous
 				}
