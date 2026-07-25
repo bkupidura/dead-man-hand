@@ -22,7 +22,51 @@ func TestApiLogFormatterNewLogEntry(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "GET", apiEntry.method)
 	require.Equal(t, "/api/action/store", apiEntry.path)
-	require.Equal(t, "", apiEntry.identity)
+	require.Nil(t, apiEntry.identity)
+}
+
+func TestApiLogEntryIdentityFields(t *testing.T) {
+	tests := []struct {
+		inputIdentity *auth.Identity
+		expectedField string
+	}{
+		{
+			inputIdentity: nil,
+			expectedField: "",
+		},
+		{
+			inputIdentity: &auth.Identity{},
+			expectedField: "",
+		},
+		{
+			inputIdentity: &auth.Identity{Name: "admin"},
+			expectedField: " identity=admin",
+		},
+		{
+			inputIdentity: &auth.Identity{Type: auth.AuthTypeBearer},
+			expectedField: " type=bearer",
+		},
+		{
+			inputIdentity: &auth.Identity{Reason: "invalid_token"},
+			expectedField: " reason=invalid_token",
+		},
+		{
+			inputIdentity: &auth.Identity{Name: "admin", Type: auth.AuthTypeBearer},
+			expectedField: " identity=admin type=bearer",
+		},
+		{
+			inputIdentity: &auth.Identity{Type: auth.AuthTypeBearer, Reason: "invalid_token"},
+			expectedField: " type=bearer reason=invalid_token",
+		},
+		{
+			inputIdentity: &auth.Identity{Name: "admin", Type: auth.AuthTypeBearer, Reason: "insufficient_scope"},
+			expectedField: " identity=admin type=bearer reason=insufficient_scope",
+		},
+	}
+	for _, test := range tests {
+		entry := &apiLogEntry{identity: test.inputIdentity}
+		require.Equal(t, test.expectedField, entry.identityFields())
+	}
 }
 
 func TestApiLogEntryWrite(t *testing.T) {
@@ -36,23 +80,30 @@ func TestApiLogEntryWrite(t *testing.T) {
 			inputEntry:      &apiLogEntry{method: "GET", path: "/api/action/store", remote: "1.2.3.4"},
 			inputStatus:     http.StatusOK,
 			expectedContain: []string{"GET /api/action/store", "from 1.2.3.4", "status=200"},
-			expectedExclude: []string{"identity="},
+			expectedExclude: []string{"identity=", "type=", "reason="},
 		},
 		{
 			inputEntry:      &apiLogEntry{method: "GET", path: "/api/action/store", remote: "1.2.3.4"},
 			inputStatus:     http.StatusUnauthorized,
 			expectedContain: []string{"status=401"},
+			expectedExclude: []string{"identity=", "type=", "reason="},
+		},
+		{
+			inputEntry:      &apiLogEntry{method: "GET", path: "/api/action/store", remote: "1.2.3.4", identity: &auth.Identity{Name: "admin", Type: auth.AuthTypeBearer}},
+			inputStatus:     http.StatusOK,
+			expectedContain: []string{"status=200", "identity=admin", "type=bearer"},
+			expectedExclude: []string{"reason="},
+		},
+		{
+			inputEntry:      &apiLogEntry{method: "GET", path: "/api/action/store", remote: "1.2.3.4", identity: &auth.Identity{Type: auth.AuthTypeBearer, Reason: "invalid_token"}},
+			inputStatus:     http.StatusUnauthorized,
+			expectedContain: []string{"status=401", "type=bearer", "reason=invalid_token"},
 			expectedExclude: []string{"identity="},
 		},
 		{
-			inputEntry:      &apiLogEntry{method: "GET", path: "/api/action/store", remote: "1.2.3.4", identity: "admin"},
+			inputEntry:      &apiLogEntry{method: "GET", path: "/api/action/store", remote: "1.2.3.4", identity: &auth.Identity{Name: "admin", Type: auth.AuthTypeBearer, Reason: "insufficient_scope"}},
 			inputStatus:     http.StatusUnauthorized,
-			expectedContain: []string{"status=401", "identity=admin"},
-		},
-		{
-			inputEntry:      &apiLogEntry{method: "GET", path: "/api/action/store", remote: "1.2.3.4", identity: "admin"},
-			inputStatus:     http.StatusOK,
-			expectedContain: []string{"status=200", "identity=admin"},
+			expectedContain: []string{"status=401", "identity=admin", "type=bearer", "reason=insufficient_scope"},
 		},
 	}
 	for _, test := range tests {
@@ -72,7 +123,7 @@ func TestApiLogEntryWrite(t *testing.T) {
 }
 
 func TestApiLogEntryPanic(t *testing.T) {
-	entry := &apiLogEntry{method: "GET", path: "/api/action/store", remote: "1.2.3.4", identity: "admin"}
+	entry := &apiLogEntry{method: "GET", path: "/api/action/store", remote: "1.2.3.4", identity: &auth.Identity{Name: "admin"}}
 
 	buf := &bytes.Buffer{}
 	log.SetOutput(buf)
@@ -83,17 +134,29 @@ func TestApiLogEntryPanic(t *testing.T) {
 	require.Contains(t, buf.String(), "identity=admin")
 }
 
+func TestApiLogEntryWriteReflectsLaterIdentityMutation(t *testing.T) {
+	identity := &auth.Identity{Name: "admin", Type: auth.AuthTypeBearer}
+	entry := &apiLogEntry{method: "GET", path: "/api/action/store", remote: "1.2.3.4", identity: identity}
+
+	identity.Reason = "insufficient_scope"
+
+	buf := &bytes.Buffer{}
+	log.SetOutput(buf)
+	defer log.SetOutput(os.Stderr)
+
+	entry.Write(http.StatusUnauthorized, 10, http.Header{}, time.Millisecond, nil)
+
+	require.Contains(t, buf.String(), "identity=admin")
+	require.Contains(t, buf.String(), "reason=insufficient_scope")
+}
+
 func TestLogIdentity(t *testing.T) {
 	tests := []struct {
-		inputIdentity    *auth.Identity
-		expectedIdentity string
+		inputIdentity *auth.Identity
 	}{
+		{},
 		{
-			expectedIdentity: "",
-		},
-		{
-			inputIdentity:    &auth.Identity{Name: "admin", Scopes: []string{"api"}},
-			expectedIdentity: "admin",
+			inputIdentity: &auth.Identity{Name: "admin", Scopes: []string{"api"}},
 		},
 	}
 	for _, test := range tests {
@@ -111,12 +174,15 @@ func TestLogIdentity(t *testing.T) {
 		logIdentity(next).ServeHTTP(httptest.NewRecorder(), req)
 
 		require.True(t, called)
-		require.Equal(t, test.expectedIdentity, entry.identity)
+		if test.inputIdentity == nil {
+			require.Nil(t, entry.identity)
+		} else {
+			require.Same(t, test.inputIdentity, entry.identity)
+		}
 	}
 }
 
 func TestLogIdentityNoEntry(t *testing.T) {
-	// No log entry in context (eg. Logger not wired up): must not panic, must still call next.
 	req := httptest.NewRequest("GET", "/x", nil)
 	req = req.WithContext(auth.ContextWithIdentity(req.Context(), &auth.Identity{Name: "admin"}))
 

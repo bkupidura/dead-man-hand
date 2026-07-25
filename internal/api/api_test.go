@@ -648,7 +648,7 @@ func TestAddVaultSecretRequest(t *testing.T) {
 	}{
 		{
 			payload:       `{"key": "", "process_after": 10}`,
-			expectedError: fmt.Errorf("key must be provided"),
+			expectedError: fmt.Errorf("key is required"),
 			expectedReq: &addVaultSecretRequest{
 				Key:          "",
 				ProcessAfter: 10,

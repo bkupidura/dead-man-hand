@@ -79,7 +79,7 @@ func (s *SignedURLConfig) Validate() error {
 			return err
 		}
 		s.Secret = secret
-		log.Printf("auth.signed_url.secret is not configured, random secret was generated")
+		log.Printf("auth.signed_url.secret is not configured, random secret was generated, check https://github.com/bkupidura/dead-man-hand/wiki/Security#pin-the-signed-url-secret")
 	}
 	if s.TTL == 0 {
 		s.TTL = defaultSignedURLTTL

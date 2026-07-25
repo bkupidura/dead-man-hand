@@ -573,16 +573,18 @@ func TestNewRouter(t *testing.T) {
 
 func TestLogIdentityOnDenial(t *testing.T) {
 	tests := []struct {
-		authorization       string
-		expectedHasIdentity bool
+		authorization   string
+		expectedContain []string
+		expectedExclude []string
 	}{
 		{
-			authorization:       "",
-			expectedHasIdentity: false,
+			authorization:   "",
+			expectedContain: []string{"reason=missing_credentials"},
+			expectedExclude: []string{"identity=", "type="},
 		},
 		{
-			authorization:       "Bearer example-bearer-token",
-			expectedHasIdentity: true,
+			authorization:   "Bearer example-bearer-token",
+			expectedContain: []string{"identity=test", "type=bearer", "reason=insufficient_scope"},
 		},
 	}
 	for _, test := range tests {
@@ -602,10 +604,11 @@ func TestLogIdentityOnDenial(t *testing.T) {
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusUnauthorized, w.Code)
-		if test.expectedHasIdentity {
-			require.Contains(t, buf.String(), "identity=test")
-		} else {
-			require.NotContains(t, buf.String(), "identity=")
+		for _, c := range test.expectedContain {
+			require.Contains(t, buf.String(), c)
+		}
+		for _, c := range test.expectedExclude {
+			require.NotContains(t, buf.String(), c)
 		}
 	}
 }

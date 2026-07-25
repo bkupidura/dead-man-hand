@@ -42,6 +42,18 @@ type Secret struct {
 	EncryptionMeta EncryptionMeta `json:"encryption"`
 }
 
+// Validate checks Secret fields.
+// It is shared by all secret creation paths (currently API only) and re-checked at load time.
+func (s *Secret) Validate() error {
+	if s.Key == "" {
+		return fmt.Errorf("key is required")
+	}
+	if s.ProcessAfter <= 0 {
+		return fmt.Errorf("process_after should be greater than 0")
+	}
+	return nil
+}
+
 // VaultData stores Secrets for single clientUUID.
 type VaultData struct {
 	LastSeen time.Time          `json:"last_seen"` // when client was last seen
@@ -96,6 +108,32 @@ func New(opts *Options) (VaultInterface, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	c, err := cryptNewAge(v.key)
+	if err != nil {
+		return nil, err
+	}
+
+	for clientUUID, clientData := range v.data {
+		if clientData == nil {
+			return nil, fmt.Errorf("vault.json contains a nil client entry for %s", clientUUID)
+		}
+		if clientData.LastSeen.After(time.Now()) {
+			return nil, fmt.Errorf("client %s has last_seen %s in the future", clientUUID, clientData.LastSeen)
+		}
+		for secretUUID, secret := range clientData.Secrets {
+			if secret == nil {
+				return nil, fmt.Errorf("vault.json contains a nil secret %s/%s", clientUUID, secretUUID)
+			}
+			if err := secret.Validate(); err != nil {
+				return nil, fmt.Errorf("secret %s/%s failed validation: %w", clientUUID, secretUUID, err)
+			}
+			if _, err := c.Decrypt(secret.Key); err != nil {
+				return nil, fmt.Errorf("secret %s/%s cannot be decrypted with the configured key: %w", clientUUID, secretUUID, err)
+			}
+		}
+	}
+
 	return v, nil
 }
 
