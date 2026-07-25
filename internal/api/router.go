@@ -13,6 +13,8 @@ const maxRequestBodyBytes = 1 << 20 // 1 MiB
 
 // NewRouter creates http router.
 func NewRouter(opts *Options) *chi.Mux {
+	aliveH := aliveHandler(opts.State, opts.VaultURL, opts.VaultClientUUID, opts.VaultToken)
+
 	httpRouter := chi.NewRouter()
 
 	httpRouter.Group(func(r chi.Router) {
@@ -39,11 +41,11 @@ func NewRouter(opts *Options) *chi.Mux {
 		if opts.DMHEnabled {
 			r.Route("/alive", func(r chi.Router) {
 				r.Get("/", aliveWebHandler())
-				r.Post("/", aliveHandler(opts.State, opts.VaultURL, opts.VaultClientUUID, opts.VaultToken))
+				r.Post("/", aliveH)
 			})
 			r.Route("/api/alive", func(r chi.Router) {
-				r.Get("/", aliveHandler(opts.State, opts.VaultURL, opts.VaultClientUUID, opts.VaultToken))
-				r.Post("/", aliveHandler(opts.State, opts.VaultURL, opts.VaultClientUUID, opts.VaultToken))
+				r.Get("/", aliveH)
+				r.Post("/", aliveH)
 			})
 			r.Route("/api/action/test", func(r chi.Router) {
 				r.Post("/", testActionHandler(opts.Execute, opts.Auth))
