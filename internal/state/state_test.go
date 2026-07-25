@@ -50,6 +50,10 @@ func TestActionValidate(t *testing.T) {
 			expectedError: fmt.Errorf("kind is required"),
 		},
 		{
+			inputAction:   &Action{Kind: "unsupported", Data: `{"message": "test"}`, ProcessAfter: 10},
+			expectedError: fmt.Errorf("kind unsupported is not supported"),
+		},
+		{
 			inputAction:   &Action{Kind: "dummy", Data: `{"message": "test"}`},
 			expectedError: fmt.Errorf("process_after should be greater than 0"),
 		},
@@ -145,8 +149,9 @@ func TestNew(t *testing.T) {
 									Comment:      "",
 									Data:         "some-encrypted-content",
 								},
-								UUID:      "9acc344e-a65b-4675-9723-5664c0e73c76",
-								Processed: 0,
+								UUID:           "9acc344e-a65b-4675-9723-5664c0e73c76",
+								Processed:      0,
+								EncryptionMeta: EncryptionMeta{VaultURL: "https://dmh-vault.com/endpoint"},
 							},
 							{
 								Action: Action{
@@ -155,8 +160,9 @@ func TestNew(t *testing.T) {
 									Comment:      "test",
 									Data:         "some-encrypted-content2",
 								},
-								UUID:      "7df7c024-d0a8-4183-83fa-373ea4a7735a",
-								Processed: 1,
+								UUID:           "7df7c024-d0a8-4183-83fa-373ea4a7735a",
+								Processed:      1,
+								EncryptionMeta: EncryptionMeta{VaultURL: "https://dmh-vault.com/endpoint"},
 							},
 						},
 					},
@@ -169,7 +175,97 @@ func TestNew(t *testing.T) {
 				f, err := os.Create("test_state.json")
 				require.Nil(t, err)
 				defer f.Close()
-				_, err = f.WriteString(`{"last_seen":"2025-03-26T14:55:40.119447+01:00","actions":[{"uuid":"9acc344e-a65b-4675-9723-5664c0e73c76","kind":"mail","data":"some-encrypted-content","process_after":10,"comment":"","processed":0},{"uuid":"7df7c024-d0a8-4183-83fa-373ea4a7735a","kind":"mail","data":"some-encrypted-content2","process_after":10,"comment":"test","processed":1}]}`)
+				_, err = f.WriteString(`{"last_seen":"2025-03-26T14:55:40.119447+01:00","actions":[{"uuid":"9acc344e-a65b-4675-9723-5664c0e73c76","kind":"mail","data":"some-encrypted-content","process_after":10,"comment":"","processed":0,"encryption":{"vault_url":"https://dmh-vault.com/endpoint"}},{"uuid":"7df7c024-d0a8-4183-83fa-373ea4a7735a","kind":"mail","data":"some-encrypted-content2","process_after":10,"comment":"test","processed":1,"encryption":{"vault_url":"https://dmh-vault.com/endpoint"}}]}`)
+				require.Nil(t, err)
+			},
+		},
+		{
+			inputOptions: &Options{
+				VaultURL:        "https://dmh-vault.com/endpoint",
+				VaultClientUUID: "random-uuid",
+				SavePath:        "test_state.json",
+			},
+			expectedErrorContains: "action 9acc344e-a65b-4675-9723-5664c0e73c76 (kind:unsupported) failed validation: kind unsupported is not supported",
+			statePathFunc: func() {
+				f, err := os.Create("test_state.json")
+				require.Nil(t, err)
+				defer f.Close()
+				_, err = f.WriteString(`{"last_seen":"2025-03-26T14:55:40.119447+01:00","actions":[{"uuid":"9acc344e-a65b-4675-9723-5664c0e73c76","kind":"unsupported","data":"some-encrypted-content","process_after":10,"comment":"","processed":0}]}`)
+				require.Nil(t, err)
+			},
+		},
+		{
+			inputOptions: &Options{
+				VaultURL:        "https://dmh-vault.com/endpoint",
+				VaultClientUUID: "random-uuid",
+				SavePath:        "test_state.json",
+			},
+			expectedErrorContains: "action 9acc344e-a65b-4675-9723-5664c0e73c76 (kind:dummy) has invalid processed value 3",
+			statePathFunc: func() {
+				f, err := os.Create("test_state.json")
+				require.Nil(t, err)
+				defer f.Close()
+				_, err = f.WriteString(`{"last_seen":"2025-03-26T14:55:40.119447+01:00","actions":[{"uuid":"9acc344e-a65b-4675-9723-5664c0e73c76","kind":"dummy","data":"some-encrypted-content","process_after":10,"comment":"","processed":3}]}`)
+				require.Nil(t, err)
+			},
+		},
+		{
+			inputOptions: &Options{
+				VaultURL:        "https://dmh-vault.com/endpoint",
+				VaultClientUUID: "random-uuid",
+				SavePath:        "test_state.json",
+			},
+			expectedErrorContains: "action 9acc344e-a65b-4675-9723-5664c0e73c76 (kind:dummy) has last_run 2099-01-01 00:00:00 +0000 UTC in the future",
+			statePathFunc: func() {
+				f, err := os.Create("test_state.json")
+				require.Nil(t, err)
+				defer f.Close()
+				_, err = f.WriteString(`{"last_seen":"2025-03-26T14:55:40.119447+01:00","actions":[{"uuid":"9acc344e-a65b-4675-9723-5664c0e73c76","kind":"dummy","data":"some-encrypted-content","process_after":10,"comment":"","processed":0,"last_run":"2099-01-01T00:00:00Z","encryption":{"vault_url":"https://dmh-vault.com/endpoint"}}]}`)
+				require.Nil(t, err)
+			},
+		},
+		{
+			inputOptions: &Options{
+				VaultURL:        "https://dmh-vault.com/endpoint",
+				VaultClientUUID: "random-uuid",
+				SavePath:        "test_state.json",
+			},
+			expectedErrorContains: "action 9acc344e-a65b-4675-9723-5664c0e73c76 (kind:dummy) is missing encryption vault_url",
+			statePathFunc: func() {
+				f, err := os.Create("test_state.json")
+				require.Nil(t, err)
+				defer f.Close()
+				_, err = f.WriteString(`{"last_seen":"2025-03-26T14:55:40.119447+01:00","actions":[{"uuid":"9acc344e-a65b-4675-9723-5664c0e73c76","kind":"dummy","data":"some-encrypted-content","process_after":10,"comment":"","processed":0}]}`)
+				require.Nil(t, err)
+			},
+		},
+		{
+			inputOptions: &Options{
+				VaultURL:        "https://dmh-vault.com/endpoint",
+				VaultClientUUID: "random-uuid",
+				SavePath:        "test_state.json",
+			},
+			expectedErrorContains: "last_seen 2099-01-01 00:00:00 +0000 UTC is in the future",
+			statePathFunc: func() {
+				f, err := os.Create("test_state.json")
+				require.Nil(t, err)
+				defer f.Close()
+				_, err = f.WriteString(`{"last_seen":"2099-01-01T00:00:00Z","actions":[]}`)
+				require.Nil(t, err)
+			},
+		},
+		{
+			inputOptions: &Options{
+				VaultURL:        "https://dmh-vault.com/endpoint",
+				VaultClientUUID: "random-uuid",
+				SavePath:        "test_state.json",
+			},
+			expectedErrorContains: "state.json contains a nil action",
+			statePathFunc: func() {
+				f, err := os.Create("test_state.json")
+				require.Nil(t, err)
+				defer f.Close()
+				_, err = f.WriteString(`{"last_seen":"2025-03-26T14:55:40.119447+01:00","actions":[null,{"uuid":"9acc344e-a65b-4675-9723-5664c0e73c76","kind":"dummy","data":"some-encrypted-content","process_after":10,"comment":"","processed":0}]}`)
 				require.Nil(t, err)
 			},
 		},

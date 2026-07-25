@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"sync"
 	"time"
 
@@ -32,7 +33,8 @@ var (
 	osChmod     = os.Chmod
 	jsonMarshal = json.Marshal
 	// httpClient is used for the outbound http connections.
-	httpClient = &http.Client{Timeout: httpClientTimeout}
+	httpClient       = &http.Client{Timeout: httpClientTimeout}
+	knownActionKinds = []string{"dummy", "json_post", "mail", "bulksms"}
 )
 
 // Action stores user actions.
@@ -53,6 +55,9 @@ func (a *Action) Validate() error {
 	}
 	if a.Kind == "" {
 		return fmt.Errorf("kind is required")
+	}
+	if !slices.Contains(knownActionKinds, a.Kind) {
+		return fmt.Errorf("kind %s is not supported", a.Kind)
 	}
 	if a.ProcessAfter <= 0 {
 		return fmt.Errorf("process_after should be greater than 0")
@@ -144,6 +149,29 @@ func New(opts *Options) (StateInterface, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	if state.data.LastSeen.After(time.Now()) {
+		return nil, fmt.Errorf("state.json last_seen %s is in the future", state.data.LastSeen)
+	}
+
+	for _, a := range state.data.Actions {
+		if a == nil {
+			return nil, fmt.Errorf("state.json contains a nil action")
+		}
+		if err := a.Validate(); err != nil {
+			return nil, fmt.Errorf("action %s (kind:%s) failed validation: %w", a.UUID, a.Kind, err)
+		}
+		if a.Processed < 0 || a.Processed > 2 {
+			return nil, fmt.Errorf("action %s (kind:%s) has invalid processed value %d", a.UUID, a.Kind, a.Processed)
+		}
+		if a.LastRun.After(time.Now()) {
+			return nil, fmt.Errorf("action %s (kind:%s) has last_run %s in the future", a.UUID, a.Kind, a.LastRun)
+		}
+		if a.EncryptionMeta.VaultURL == "" {
+			return nil, fmt.Errorf("action %s (kind:%s) is missing encryption vault_url", a.UUID, a.Kind)
+		}
+	}
+
 	return state, nil
 }
 

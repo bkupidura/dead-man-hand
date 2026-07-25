@@ -181,7 +181,7 @@ func TestAddAction(t *testing.T) {
 		},
 		{
 			inputFile: "testdata/add-success.yaml",
-			fileContent: `- kind: test
+			fileContent: `- kind: dummy
   data: '{"test": true}'
   process_after: 10
 `,
@@ -190,14 +190,14 @@ func TestAddAction(t *testing.T) {
 			},
 		},
 		{
-			inputParams: []string{"--data", `{"test": true}`, "--kind", "test", "--process-after", "10"},
+			inputParams: []string{"--data", `{"test": true}`, "--kind", "dummy", "--process-after", "10"},
 			mockHandler: func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusInternalServerError)
 			},
 			expectedError: "server returned status 500: ",
 		},
 		{
-			inputParams: []string{"--data", `{"test": true}`, "--kind", "test", "--process-after", "10"},
+			inputParams: []string{"--data", `{"test": true}`, "--kind", "dummy", "--process-after", "10"},
 			mockHandler: func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusCreated)
 			},
@@ -260,7 +260,7 @@ func TestTestAction(t *testing.T) {
 		},
 		{
 			inputFile: "testdata/test-success.yaml",
-			fileContent: `- kind: test
+			fileContent: `- kind: dummy
   data: '{"test": true}'
   process_after: 10
 `,
@@ -269,14 +269,14 @@ func TestTestAction(t *testing.T) {
 			},
 		},
 		{
-			inputParams: []string{"--data", `{"test": true}`, "--kind", "test", "--process-after", "10"},
+			inputParams: []string{"--data", `{"test": true}`, "--kind", "dummy", "--process-after", "10"},
 			mockHandler: func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusInternalServerError)
 			},
 			expectedError: "server returned status 500: ",
 		},
 		{
-			inputParams: []string{"--data", `{"test": true}`, "--kind", "test", "--process-after", "10"},
+			inputParams: []string{"--data", `{"test": true}`, "--kind", "dummy", "--process-after", "10"},
 			mockHandler: func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
 			},
@@ -409,7 +409,7 @@ func TestLoadActionsFromFile(t *testing.T) {
 	}{
 		{
 			inputFile:   "testdata/load-valid.yaml",
-			fileContent: "- kind: test\n  data: '{\"test\": true}'\n  process_after: 10\n- kind: webhook\n  data: '{\"url\": \"https://example.com\"}'\n  process_after: 24\n",
+			fileContent: "- kind: dummy\n  data: '{\"test\": true}'\n  process_after: 10\n- kind: json_post\n  data: '{\"url\": \"https://example.com\"}'\n  process_after: 24\n",
 			expectedLen: 2,
 		},
 		{
@@ -544,7 +544,7 @@ func TestCreateAction(t *testing.T) {
 		cmd := createCLI()
 		cmd.Set("server", fakeServer.URL)
 
-		err := createAction(cmd, &state.Action{Kind: "test", Data: `{"test": true}`, ProcessAfter: 10})
+		err := createAction(cmd, &state.Action{Kind: "dummy", Data: `{"test": true}`, ProcessAfter: 10})
 
 		if test.expectedError == "" {
 			require.NoError(t, err)
@@ -847,22 +847,22 @@ func TestSendAction(t *testing.T) {
 			expectedError: "data is required",
 		},
 		{
-			action:          &state.Action{Kind: "test", Data: `{"test": true}`, ProcessAfter: 10},
+			action:          &state.Action{Kind: "dummy", Data: `{"test": true}`, ProcessAfter: 10},
 			mockJsonMarshal: func(v any) ([]byte, error) { return nil, fmt.Errorf("forced marshal error") },
 			expectedError:   "failed to marshal JSON",
 		},
 		{
-			action:        &state.Action{Kind: "test", Data: `{"test": true}`, ProcessAfter: 10},
+			action:        &state.Action{Kind: "dummy", Data: `{"test": true}`, ProcessAfter: 10},
 			inputServer:   "\r",
 			expectedError: `unable to parse address: parse "\r": net/url: invalid control character in URL`,
 		},
 		{
-			action:        &state.Action{Kind: "test", Data: `{"test": true}`, ProcessAfter: 10},
+			action:        &state.Action{Kind: "dummy", Data: `{"test": true}`, ProcessAfter: 10},
 			wantStatus:    http.StatusCreated,
 			expectedError: `request failed: Post "http://127.0.0.1:8080/api/action/store": dial tcp 127.0.0.1:8080: connect: connection refused`,
 		},
 		{
-			action: &state.Action{Kind: "test", Data: `{"test": true}`, ProcessAfter: 10},
+			action: &state.Action{Kind: "dummy", Data: `{"test": true}`, ProcessAfter: 10},
 			mockHandler: func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusInternalServerError)
 			},
@@ -967,7 +967,7 @@ func TestSendTestAction(t *testing.T) {
 		cmd := createCLI()
 		cmd.Set("server", fakeServer.URL)
 
-		err := sendTestAction(cmd, &state.Action{Kind: "test", Data: `{"test": true}`, ProcessAfter: 10})
+		err := sendTestAction(cmd, &state.Action{Kind: "dummy", Data: `{"test": true}`, ProcessAfter: 10})
 
 		if test.expectedError == "" {
 			require.NoError(t, err)
@@ -979,10 +979,10 @@ func TestSendTestAction(t *testing.T) {
 }
 
 func TestProcessActionsFromFile(t *testing.T) {
-	twoActionsYAML := `- kind: test
+	twoActionsYAML := `- kind: dummy
   data: '{"test": true}'
   process_after: 10
-- kind: webhook
+- kind: json_post
   data: '{"url": "https://example.com"}'
   process_after: 24
 `
@@ -1016,7 +1016,7 @@ func TestProcessActionsFromFile(t *testing.T) {
 		},
 		{
 			inputFile: "testdata/process-single-failure.yaml",
-			fileContent: `- kind: test
+			fileContent: `- kind: dummy
   data: '{"test": true}'
   process_after: 10
 `,
