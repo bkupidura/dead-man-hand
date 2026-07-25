@@ -290,14 +290,11 @@ type addVaultSecretRequest struct {
 
 // Bind validates addVaultSecretRequest.
 func (req *addVaultSecretRequest) Bind(r *http.Request) error {
-	if req.Key == "" {
-		return fmt.Errorf("key must be provided")
+	s := &vault.Secret{
+		Key:          req.Key,
+		ProcessAfter: req.ProcessAfter,
 	}
-
-	if req.ProcessAfter <= 0 {
-		return fmt.Errorf("process_after should be greater than 0")
-	}
-	return nil
+	return s.Validate()
 }
 
 // addVaultSecretHandler adds new secret to Vault.

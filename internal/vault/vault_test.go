@@ -32,12 +32,40 @@ func (m *mockCrypt) GetPrivateKey() string {
 	return args.String(0)
 }
 
+func TestSecretValidate(t *testing.T) {
+	tests := []struct {
+		inputSecret   *Secret
+		expectedError error
+	}{
+		{
+			inputSecret:   &Secret{ProcessAfter: 10},
+			expectedError: fmt.Errorf("key is required"),
+		},
+		{
+			inputSecret:   &Secret{Key: "test"},
+			expectedError: fmt.Errorf("process_after should be greater than 0"),
+		},
+		{
+			inputSecret:   &Secret{Key: "test", ProcessAfter: -1},
+			expectedError: fmt.Errorf("process_after should be greater than 0"),
+		},
+		{
+			inputSecret: &Secret{Key: "test", ProcessAfter: 10},
+		},
+	}
+	for _, test := range tests {
+		err := test.inputSecret.Validate()
+		require.Equal(t, test.expectedError, err)
+	}
+}
+
 func TestNew(t *testing.T) {
 	vaultFile := "test_vault.json"
 	tests := []struct {
 		inputOptions          *Options
 		expectedVault         func() VaultInterface
 		expectedErrorContains string
+		mockCryptNewAge       func(string) (crypt.AgeInterface, error)
 		vaultPathFunc         func()
 	}{
 		{
@@ -92,6 +120,25 @@ func TestNew(t *testing.T) {
 				Key:               "AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0",
 				SecretProcessUnit: time.Hour,
 			},
+			expectedVault:         func() VaultInterface { return nil },
+			expectedErrorContains: "mockCryptNewAge error",
+			mockCryptNewAge: func(string) (crypt.AgeInterface, error) {
+				return nil, fmt.Errorf("mockCryptNewAge error")
+			},
+			vaultPathFunc: func() {
+				f, err := os.Create(vaultFile)
+				require.Nil(t, err)
+				defer f.Close()
+				_, err = f.WriteString(`{"testClientUUID":{"last_seen":"2025-03-26T14:55:40.119447+01:00","secrets":{}}}`)
+				require.Nil(t, err)
+			},
+		},
+		{
+			inputOptions: &Options{
+				SavePath:          vaultFile,
+				Key:               "AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0",
+				SecretProcessUnit: time.Hour,
+			},
 			expectedVault: func() VaultInterface {
 				mockTime, err := time.Parse("2006-01-02T15:04:05.999999-07:00", "2025-03-26T14:55:40.119447+01:00")
 				require.Nil(t, err)
@@ -125,11 +172,118 @@ func TestNew(t *testing.T) {
 					secretProcessUnit: time.Hour,
 				}
 			},
+			mockCryptNewAge: func(string) (crypt.AgeInterface, error) {
+				c := &mockCrypt{}
+				c.On("Decrypt", "test").Return("decrypted-test", nil)
+				c.On("Decrypt", "test2").Return("decrypted-test2", nil)
+				return c, nil
+			},
 			vaultPathFunc: func() {
 				f, err := os.Create(vaultFile)
 				require.Nil(t, err)
 				defer f.Close()
 				_, err = f.WriteString(`{"testClientUUID":{"last_seen":"2025-03-26T14:55:40.119447+01:00","secrets":{"testSecret1":{"key":"test","process_after":10},"testSecret2":{"key":"test2","process_after":10}}},"testClientUUID2":{"last_seen":"2025-03-26T14:55:40.119447+01:00","secrets":{"testSecret3":{"key":"test","process_after":10}}}}`)
+				require.Nil(t, err)
+			},
+		},
+		{
+			inputOptions: &Options{
+				SavePath:          vaultFile,
+				Key:               "AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0",
+				SecretProcessUnit: time.Hour,
+			},
+			expectedVault:         func() VaultInterface { return nil },
+			expectedErrorContains: "vault.json contains a nil client entry for testClientUUID",
+			vaultPathFunc: func() {
+				f, err := os.Create(vaultFile)
+				require.Nil(t, err)
+				defer f.Close()
+				_, err = f.WriteString(`{"testClientUUID":null}`)
+				require.Nil(t, err)
+			},
+		},
+		{
+			inputOptions: &Options{
+				SavePath:          vaultFile,
+				Key:               "AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0",
+				SecretProcessUnit: time.Hour,
+			},
+			expectedVault:         func() VaultInterface { return nil },
+			expectedErrorContains: "client testClientUUID has last_seen 2099-01-01 00:00:00 +0000 UTC in the future",
+			vaultPathFunc: func() {
+				f, err := os.Create(vaultFile)
+				require.Nil(t, err)
+				defer f.Close()
+				_, err = f.WriteString(`{"testClientUUID":{"last_seen":"2099-01-01T00:00:00Z","secrets":{}}}`)
+				require.Nil(t, err)
+			},
+		},
+		{
+			inputOptions: &Options{
+				SavePath:          vaultFile,
+				Key:               "AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0",
+				SecretProcessUnit: time.Hour,
+			},
+			expectedVault:         func() VaultInterface { return nil },
+			expectedErrorContains: "vault.json contains a nil secret testClientUUID/testSecret1",
+			vaultPathFunc: func() {
+				f, err := os.Create(vaultFile)
+				require.Nil(t, err)
+				defer f.Close()
+				_, err = f.WriteString(`{"testClientUUID":{"last_seen":"2025-03-26T14:55:40.119447+01:00","secrets":{"testSecret1":null}}}`)
+				require.Nil(t, err)
+			},
+		},
+		{
+			inputOptions: &Options{
+				SavePath:          vaultFile,
+				Key:               "AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0",
+				SecretProcessUnit: time.Hour,
+			},
+			expectedVault:         func() VaultInterface { return nil },
+			expectedErrorContains: "secret testClientUUID/testSecret1 failed validation: key is required",
+			vaultPathFunc: func() {
+				f, err := os.Create(vaultFile)
+				require.Nil(t, err)
+				defer f.Close()
+				_, err = f.WriteString(`{"testClientUUID":{"last_seen":"2025-03-26T14:55:40.119447+01:00","secrets":{"testSecret1":{"key":"","process_after":10}}}}`)
+				require.Nil(t, err)
+			},
+		},
+		{
+			inputOptions: &Options{
+				SavePath:          vaultFile,
+				Key:               "AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0",
+				SecretProcessUnit: time.Hour,
+			},
+			expectedVault:         func() VaultInterface { return nil },
+			expectedErrorContains: "secret testClientUUID/testSecret1 failed validation: process_after should be greater than 0",
+			vaultPathFunc: func() {
+				f, err := os.Create(vaultFile)
+				require.Nil(t, err)
+				defer f.Close()
+				_, err = f.WriteString(`{"testClientUUID":{"last_seen":"2025-03-26T14:55:40.119447+01:00","secrets":{"testSecret1":{"key":"test","process_after":0}}}}`)
+				require.Nil(t, err)
+			},
+		},
+		{
+			inputOptions: &Options{
+				SavePath:          vaultFile,
+				Key:               "AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0",
+				SecretProcessUnit: time.Hour,
+			},
+			expectedVault:         func() VaultInterface { return nil },
+			expectedErrorContains: "secret testClientUUID/testSecret1 cannot be decrypted with the configured key",
+			mockCryptNewAge: func(string) (crypt.AgeInterface, error) {
+				c := &mockCrypt{}
+				c.On("Decrypt", "test").Return("", fmt.Errorf("mockCryptNewAge decrypt error"))
+				return c, nil
+			},
+			vaultPathFunc: func() {
+				f, err := os.Create(vaultFile)
+				require.Nil(t, err)
+				defer f.Close()
+				_, err = f.WriteString(`{"testClientUUID":{"last_seen":"2025-03-26T14:55:40.119447+01:00","secrets":{"testSecret1":{"key":"test","process_after":10}}}}`)
 				require.Nil(t, err)
 			},
 		},
@@ -151,6 +305,14 @@ func TestNew(t *testing.T) {
 		test.vaultPathFunc()
 		defer os.Remove(vaultFile)
 		defer os.Remove("test_blocker_vault")
+
+		cryptNewAge = crypt.NewAge
+		if test.mockCryptNewAge != nil {
+			cryptNewAge = test.mockCryptNewAge
+			defer func() {
+				cryptNewAge = crypt.NewAge
+			}()
+		}
 
 		v, err := New(test.inputOptions)
 		if test.expectedErrorContains == "" {
