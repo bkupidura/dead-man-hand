@@ -27,6 +27,7 @@ type ExecuteInterface interface {
 type Execute struct {
 	bulkSMSConf     BulkSMSConfig
 	mailConf        MailConfig
+	execConf        ExecConfig
 	signedURLSecret string
 	signedURLTTL    int
 }
@@ -36,6 +37,7 @@ func New(opts *Options) (ExecuteInterface, error) {
 	e := &Execute{
 		bulkSMSConf:     opts.BulkSMSConf,
 		mailConf:        opts.MailConf,
+		execConf:        opts.ExecConf,
 		signedURLSecret: opts.SignedURLSecret,
 		signedURLTTL:    opts.SignedURLTTL,
 	}
@@ -93,6 +95,15 @@ func (e *Execute) prepare(action *state.Action) (executeData, error) {
 			return nil, err
 		}
 		if err := data.populateConfig(e); err != nil {
+			return nil, err
+		}
+		return data, nil
+	case "exec":
+		data := &ExecuteExec{}
+		if err := data.populateConfig(e); err != nil {
+			return nil, err
+		}
+		if err := data.populate(action); err != nil {
 			return nil, err
 		}
 		return data, nil

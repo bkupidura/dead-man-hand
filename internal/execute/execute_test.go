@@ -230,6 +230,36 @@ func TestPrepare(t *testing.T) {
 			expectedError: fmt.Errorf("FailOnPopulateConfig error"),
 		},
 		{
+			inputExecute: &Execute{
+				execConf: ExecConfig{AllowedPaths: []string{"relative/path"}},
+			},
+			inputAction: &state.Action{
+				Kind: "exec", Data: `{"path": "/usr/local/bin/script.sh", "timeout": 10, "exit_code": [0]}`,
+			},
+			expectedError: fmt.Errorf("allowed_paths entries must be absolute paths"),
+		},
+		{
+			inputExecute: &Execute{
+				execConf: ExecConfig{AllowedPaths: []string{"/other/path"}},
+			},
+			inputAction: &state.Action{
+				Kind: "exec", Data: `{"path": "/usr/local/bin/script.sh", "timeout": 10, "exit_code": [0]}`,
+			},
+			expectedError: fmt.Errorf("path /usr/local/bin/script.sh is not permitted by execute.plugin.exec config"),
+		},
+		{
+			inputExecute: &Execute{
+				execConf: ExecConfig{AllowedPaths: []string{"/usr/local/bin/script.sh"}},
+			},
+			inputAction: &state.Action{
+				Kind: "exec", Data: `{"path": "/usr/local/bin/script.sh", "args": ["--full"], "timeout": 10, "exit_code": [0]}`,
+			},
+			expectedData: &ExecuteExec{
+				Path: "/usr/local/bin/script.sh", Args: []string{"--full"}, Timeout: 10, ExitCode: []int{0},
+				config: ExecConfig{AllowedPaths: []string{"/usr/local/bin/script.sh"}, MaxTimeout: 300},
+			},
+		},
+		{
 			inputExecute: &Execute{},
 			inputAction: &state.Action{
 				Kind: "non-existing", Data: `{}`,

@@ -147,3 +147,18 @@ func getMailConfig(k *koanf.Koanf) execute.MailConfig {
 	}
 	return config
 }
+
+// getExecConfig returns parsed config for exec execute plugin.
+// When the config section is present, it is validated at startup.
+func getExecConfig(k *koanf.Koanf) execute.ExecConfig {
+	var config execute.ExecConfig
+	if err := k.Unmarshal("execute.plugin.exec", &config); err != nil {
+		log.Panicf("unable to unmarshal config: %s", err)
+	}
+	if k.Exists("execute.plugin.exec") {
+		if err := config.Validate(); err != nil {
+			log.Panicf("invalid execute.plugin.exec config: %s", err)
+		}
+	}
+	return config
+}

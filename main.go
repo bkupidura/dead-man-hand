@@ -56,6 +56,7 @@ func main() {
 		e, err = executeNew(&execute.Options{
 			BulkSMSConf:     getBulkSMSConfig(k),
 			MailConf:        getMailConfig(k),
+			ExecConf:        getExecConfig(k),
 			SignedURLSecret: authConfig.SignedURL.Secret,
 			SignedURLTTL:    authConfig.SignedURL.TTL,
 		})
