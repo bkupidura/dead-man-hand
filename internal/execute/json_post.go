@@ -54,7 +54,7 @@ func (d *ExecuteJSONPost) Run() error {
 	return fmt.Errorf("received wrong status code %d", resp.StatusCode)
 }
 
-func (d *ExecuteJSONPost) Populate(a *state.Action) error {
+func (d *ExecuteJSONPost) populate(a *state.Action) error {
 	err := json.Unmarshal([]byte(a.Data), &d)
 	if err != nil {
 		return err
@@ -68,9 +68,5 @@ func (d *ExecuteJSONPost) Populate(a *state.Action) error {
 	if len(d.Data) == 0 {
 		return fmt.Errorf("data must be provided")
 	}
-	return nil
-}
-
-func (d *ExecuteJSONPost) PopulateConfig(e *Execute) error {
 	return nil
 }

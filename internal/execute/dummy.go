@@ -24,7 +24,7 @@ func (d *ExecuteDummy) Run() error {
 	return nil
 }
 
-func (d *ExecuteDummy) Populate(a *state.Action) error {
+func (d *ExecuteDummy) populate(a *state.Action) error {
 	err := json.Unmarshal([]byte(a.Data), &d)
 	if err != nil {
 		return err
@@ -41,7 +41,7 @@ func (d *ExecuteDummy) Populate(a *state.Action) error {
 	return nil
 }
 
-func (d *ExecuteDummy) PopulateConfig(e *Execute) error {
+func (d *ExecuteDummy) populateConfig(e *Execute) error {
 	if d.FailOnPopulateConfig {
 		return fmt.Errorf("FailOnPopulateConfig error")
 	}

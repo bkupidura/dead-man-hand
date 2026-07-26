@@ -116,6 +116,11 @@ func (e *mockExecute) Run(action *state.Action) error {
 	return args.Error(0)
 }
 
+func (e *mockExecute) CheckAction(action *state.Action) error {
+	args := e.Called(action)
+	return args.Error(0)
+}
+
 func TestHealthHandler(t *testing.T) {
 	req, err := http.NewRequest("GET", "/health", nil)
 	require.Nil(t, err)
@@ -287,6 +292,16 @@ func TestTestActionHandler(t *testing.T) {
 			payload: `{"kind": "bulksms", "process_after": 10, "data": "{\"message\": \"test\", \"destination\": [\"1111\"]}"}`,
 			mockExecuteFunc: func() execute.ExecuteInterface {
 				e := new(mockExecute)
+				e.On("CheckAction", &state.Action{Kind: "bulksms", Data: "{\"message\": \"test\", \"destination\": [\"1111\"]}", ProcessAfter: 10}).Return(fmt.Errorf("mockExecuteFunc CheckAction error"))
+				return e
+			},
+			expectedCode: http.StatusBadRequest,
+		},
+		{
+			payload: `{"kind": "bulksms", "process_after": 10, "data": "{\"message\": \"test\", \"destination\": [\"1111\"]}"}`,
+			mockExecuteFunc: func() execute.ExecuteInterface {
+				e := new(mockExecute)
+				e.On("CheckAction", &state.Action{Kind: "bulksms", Data: "{\"message\": \"test\", \"destination\": [\"1111\"]}", ProcessAfter: 10}).Return(nil)
 				e.On("Run", &state.Action{Kind: "bulksms", Data: "{\"message\": \"test\", \"destination\": [\"1111\"]}", ProcessAfter: 10}).Return(fmt.Errorf("mockExecuteFunc error"))
 				return e
 			},
@@ -296,6 +311,7 @@ func TestTestActionHandler(t *testing.T) {
 			payload: `{"kind": "bulksms", "process_after": 5, "data": "{\"message\": \"test\", \"destination\": [\"1111\"]}"}`,
 			mockExecuteFunc: func() execute.ExecuteInterface {
 				e := new(mockExecute)
+				e.On("CheckAction", &state.Action{Kind: "bulksms", Data: "{\"message\": \"test\", \"destination\": [\"1111\"]}", ProcessAfter: 5}).Return(nil)
 				e.On("Run", &state.Action{Kind: "bulksms", Data: "{\"message\": \"test\", \"destination\": [\"1111\"]}", ProcessAfter: 5}).Return(nil)
 				return e
 			},
@@ -304,7 +320,9 @@ func TestTestActionHandler(t *testing.T) {
 		{
 			payload: `{"kind": "mail", "process_after": 10, "data": "{\"message\": \"/{sig_auth:alive}\", \"destination\": [\"a@b.com\"], \"subject\": \"hi\"}"}`,
 			mockExecuteFunc: func() execute.ExecuteInterface {
-				return new(mockExecute)
+				e := new(mockExecute)
+				e.On("CheckAction", &state.Action{Kind: "mail", Data: "{\"message\": \"/{sig_auth:alive}\", \"destination\": [\"a@b.com\"], \"subject\": \"hi\"}", ProcessAfter: 10}).Return(nil)
+				return e
 			},
 			inputAuthConfig: auth.Config{Enabled: true},
 			inputIdentity:   &auth.Identity{Name: "admin", Scopes: []string{"api"}},
@@ -314,6 +332,7 @@ func TestTestActionHandler(t *testing.T) {
 			payload: `{"kind": "mail", "process_after": 5, "data": "{\"message\": \"/{sig_auth:alive}\", \"destination\": [\"a@b.com\"], \"subject\": \"hi\"}"}`,
 			mockExecuteFunc: func() execute.ExecuteInterface {
 				e := new(mockExecute)
+				e.On("CheckAction", &state.Action{Kind: "mail", Data: "{\"message\": \"/{sig_auth:alive}\", \"destination\": [\"a@b.com\"], \"subject\": \"hi\"}", ProcessAfter: 5}).Return(nil)
 				e.On("Run", &state.Action{Kind: "mail", Data: "{\"message\": \"/{sig_auth:alive}\", \"destination\": [\"a@b.com\"], \"subject\": \"hi\"}", ProcessAfter: 5}).Return(nil)
 				return e
 			},
@@ -396,35 +415,75 @@ func TestListActionsHandler(t *testing.T) {
 
 func TestAddActionRequestBind(t *testing.T) {
 	tests := []struct {
-		payload       string
-		expectedError error
-		expectedReq   *addTestActionRequest
+		payload         string
+		mockExecuteFunc func() execute.ExecuteInterface
+		expectedError   error
+		expectedReq     func(e execute.ExecuteInterface) *addTestActionRequest
 	}{
 		{
-			payload:       `{"kind": "", "data": "test", "process_after": 10}`,
+			payload: `{"kind": "", "data": "test", "process_after": 10}`,
+			mockExecuteFunc: func() execute.ExecuteInterface {
+				return new(mockExecute)
+			},
 			expectedError: fmt.Errorf("kind is required"),
-			expectedReq: &addTestActionRequest{
-				Kind:         "",
-				Data:         "test",
-				ProcessAfter: 10,
+			expectedReq: func(e execute.ExecuteInterface) *addTestActionRequest {
+				return &addTestActionRequest{
+					Kind:         "",
+					Data:         "test",
+					ProcessAfter: 10,
+					execute:      e,
+				}
+			},
+		},
+		{
+			payload: `{"kind": "bulksms", "data": "{\"message\":\"test\",\"destination\":[\"111\"]}", "process_after": 10}`,
+			mockExecuteFunc: func() execute.ExecuteInterface {
+				e := new(mockExecute)
+				e.On("CheckAction", &state.Action{Kind: "bulksms", Data: "{\"message\":\"test\",\"destination\":[\"111\"]}", ProcessAfter: 10}).Return(fmt.Errorf("mockExecuteFunc CheckAction error"))
+				return e
+			},
+			expectedError: fmt.Errorf("mockExecuteFunc CheckAction error"),
+			expectedReq: func(e execute.ExecuteInterface) *addTestActionRequest {
+				return &addTestActionRequest{
+					Kind:         "bulksms",
+					Data:         "{\"message\":\"test\",\"destination\":[\"111\"]}",
+					ProcessAfter: 10,
+					execute:      e,
+				}
 			},
 		},
 		{
 			payload: `{"kind": "bulksms", "data": "{\"message\":\"test\",\"destination\":[\"111\"]}", "process_after": 10, "min_interval": 0}`,
-			expectedReq: &addTestActionRequest{
-				Kind:         "bulksms",
-				Data:         "{\"message\":\"test\",\"destination\":[\"111\"]}",
-				ProcessAfter: 10,
-				MinInterval:  0,
+			mockExecuteFunc: func() execute.ExecuteInterface {
+				e := new(mockExecute)
+				e.On("CheckAction", &state.Action{Kind: "bulksms", Data: "{\"message\":\"test\",\"destination\":[\"111\"]}", ProcessAfter: 10}).Return(nil)
+				return e
+			},
+			expectedReq: func(e execute.ExecuteInterface) *addTestActionRequest {
+				return &addTestActionRequest{
+					Kind:         "bulksms",
+					Data:         "{\"message\":\"test\",\"destination\":[\"111\"]}",
+					ProcessAfter: 10,
+					MinInterval:  0,
+					execute:      e,
+				}
 			},
 		},
 		{
 			payload: `{"kind": "bulksms", "data": "{\"message\":\"test\",\"destination\":[\"111\"]}", "process_after": 10, "min_interval": 10}`,
-			expectedReq: &addTestActionRequest{
-				Kind:         "bulksms",
-				Data:         "{\"message\":\"test\",\"destination\":[\"111\"]}",
-				ProcessAfter: 10,
-				MinInterval:  10,
+			mockExecuteFunc: func() execute.ExecuteInterface {
+				e := new(mockExecute)
+				e.On("CheckAction", &state.Action{Kind: "bulksms", Data: "{\"message\":\"test\",\"destination\":[\"111\"]}", ProcessAfter: 10, MinInterval: 10}).Return(nil)
+				return e
+			},
+			expectedReq: func(e execute.ExecuteInterface) *addTestActionRequest {
+				return &addTestActionRequest{
+					Kind:         "bulksms",
+					Data:         "{\"message\":\"test\",\"destination\":[\"111\"]}",
+					ProcessAfter: 10,
+					MinInterval:  10,
+					execute:      e,
+				}
 			},
 		},
 	}
@@ -437,11 +496,12 @@ func TestAddActionRequestBind(t *testing.T) {
 		ctx := context.WithValue(req.Context(), chi.RouteCtxKey, chi.NewRouteContext())
 		req = req.WithContext(ctx)
 
-		parsedReq := &addTestActionRequest{}
+		e := test.mockExecuteFunc()
+		parsedReq := &addTestActionRequest{execute: e}
 		err = render.Bind(req, parsedReq)
 
 		require.Equal(t, test.expectedError, err)
-		require.Equal(t, test.expectedReq, parsedReq)
+		require.Equal(t, test.expectedReq(e), parsedReq)
 	}
 }
 
@@ -525,17 +585,37 @@ func TestAddActionHandler(t *testing.T) {
 	tests := []struct {
 		payload         string
 		mockStateFunc   func() state.StateInterface
+		mockExecuteFunc func() execute.ExecuteInterface
 		inputAuthConfig auth.Config
 		inputIdentity   *auth.Identity
 		expectedCode    int
 		expectedActions []*state.EncryptedAction
 	}{
 		{
+			payload: `{"kind": "", "data": "{\"message\":\"test\",\"destination\":[\"123\"]", "process_after": 10}`,
+			mockStateFunc: func() state.StateInterface {
+				s, err := state.New(&state.Options{})
+				require.Nil(t, err)
+				return s
+			},
+			mockExecuteFunc: func() execute.ExecuteInterface {
+				e := new(mockExecute)
+				return e
+			},
+			expectedCode:    http.StatusBadRequest,
+			expectedActions: []*state.EncryptedAction{},
+		},
+		{
 			payload: `{"kind": "bulksms", "data": "{\"message\":\"test\",\"destination\":[\"123\"]", "process_after": 10}`,
 			mockStateFunc: func() state.StateInterface {
 				s, err := state.New(&state.Options{})
 				require.Nil(t, err)
 				return s
+			},
+			mockExecuteFunc: func() execute.ExecuteInterface {
+				e := new(mockExecute)
+				e.On("CheckAction", &state.Action{Kind: "bulksms", Data: "{\"message\":\"test\",\"destination\":[\"123\"]", ProcessAfter: 10}).Return(fmt.Errorf("mockExecuteFunc error"))
+				return e
 			},
 			expectedCode:    http.StatusBadRequest,
 			expectedActions: []*state.EncryptedAction{},
@@ -547,6 +627,11 @@ func TestAddActionHandler(t *testing.T) {
 				s.On("AddAction", &state.Action{Kind: "bulksms", Data: "{\"message\":\"test\",\"destination\":[\"123\"]}", ProcessAfter: 10, Comment: ""}).Return(fmt.Errorf("mockState error"))
 				s.On("GetActions").Return([]*state.EncryptedAction{})
 				return s
+			},
+			mockExecuteFunc: func() execute.ExecuteInterface {
+				e := new(mockExecute)
+				e.On("CheckAction", &state.Action{Kind: "bulksms", Data: "{\"message\":\"test\",\"destination\":[\"123\"]}", ProcessAfter: 10}).Return(nil)
+				return e
 			},
 			expectedCode:    http.StatusInternalServerError,
 			expectedActions: []*state.EncryptedAction{},
@@ -560,6 +645,11 @@ func TestAddActionHandler(t *testing.T) {
 					{Action: state.Action{Kind: "bulksms", Data: "encrypted", ProcessAfter: 10, Comment: ""}},
 				})
 				return s
+			},
+			mockExecuteFunc: func() execute.ExecuteInterface {
+				e := new(mockExecute)
+				e.On("CheckAction", &state.Action{Kind: "bulksms", Data: "{\"message\":\"test\",\"destination\":[\"123\"]}", ProcessAfter: 10}).Return(nil)
+				return e
 			},
 			expectedCode: http.StatusCreated,
 			expectedActions: []*state.EncryptedAction{
@@ -577,6 +667,11 @@ func TestAddActionHandler(t *testing.T) {
 				})
 				return s
 			},
+			mockExecuteFunc: func() execute.ExecuteInterface {
+				e := new(mockExecute)
+				e.On("CheckAction", &state.Action{Kind: "bulksms", Data: "{\"message\":\"test\",\"destination\":[\"123\"]}", ProcessAfter: 10}).Return(nil)
+				return e
+			},
 			expectedCode: http.StatusCreated,
 			expectedActions: []*state.EncryptedAction{
 				{Action: state.Action{Kind: "bulksms", Data: "encrypted", ProcessAfter: 20, Comment: ""}},
@@ -589,6 +684,11 @@ func TestAddActionHandler(t *testing.T) {
 				s := new(mockState)
 				s.On("GetActions").Return([]*state.EncryptedAction{})
 				return s
+			},
+			mockExecuteFunc: func() execute.ExecuteInterface {
+				e := new(mockExecute)
+				e.On("CheckAction", &state.Action{Kind: "mail", Data: "{\"message\":\"/{sig_auth:alive}\",\"destination\":[\"a@b.com\"],\"subject\":\"hi\"}", ProcessAfter: 10}).Return(nil)
+				return e
 			},
 			inputAuthConfig: auth.Config{Enabled: true},
 			inputIdentity:   &auth.Identity{Name: "admin", Scopes: []string{"api"}},
@@ -604,6 +704,11 @@ func TestAddActionHandler(t *testing.T) {
 					{Action: state.Action{Kind: "mail", Data: "encrypted", ProcessAfter: 10, Comment: ""}},
 				})
 				return s
+			},
+			mockExecuteFunc: func() execute.ExecuteInterface {
+				e := new(mockExecute)
+				e.On("CheckAction", &state.Action{Kind: "mail", Data: "{\"message\":\"/{sig_auth:alive}\",\"destination\":[\"a@b.com\"],\"subject\":\"hi\"}", ProcessAfter: 10}).Return(nil)
+				return e
 			},
 			inputAuthConfig: auth.Config{Enabled: true},
 			inputIdentity:   &auth.Identity{Name: "admin", Scopes: []string{"api", "alive"}},
@@ -624,8 +729,9 @@ func TestAddActionHandler(t *testing.T) {
 
 		w := httptest.NewRecorder()
 		s := test.mockStateFunc()
+		e := test.mockExecuteFunc()
 
-		handler := addActionHandler(s, test.inputAuthConfig)
+		handler := addActionHandler(s, e, test.inputAuthConfig)
 
 		handler(w, req)
 		require.Equal(t, test.expectedCode, w.Code)

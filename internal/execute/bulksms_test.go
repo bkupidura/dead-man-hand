@@ -138,7 +138,7 @@ func TestBulkSMSPopulate(t *testing.T) {
 	}
 	for _, test := range tests {
 		plugin := test.inputPlugin
-		err := plugin.Populate(test.inputAction)
+		err := plugin.populate(test.inputAction)
 		if test.expectedError == "" {
 			require.Nil(t, err)
 		} else {
@@ -227,7 +227,7 @@ func TestBulkSMSPopulateConfig(t *testing.T) {
 	}
 	for _, test := range tests {
 		plugin := &ExecuteBulkSMS{}
-		err := plugin.PopulateConfig(test.inputExecute)
+		err := plugin.populateConfig(test.inputExecute)
 		require.Equal(t, test.expectedError, err)
 		require.Equal(t, test.expectedConfig, plugin.config)
 	}
