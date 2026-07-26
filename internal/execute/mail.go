@@ -85,7 +85,7 @@ func (d *ExecuteMail) Run() error {
 	return nil
 }
 
-func (d *ExecuteMail) Populate(a *state.Action) error {
+func (d *ExecuteMail) populate(a *state.Action) error {
 	err := json.Unmarshal([]byte(a.Data), &d)
 	if err != nil {
 		return err
@@ -132,7 +132,7 @@ func (c *MailConfig) Validate() error {
 	return nil
 }
 
-func (d *ExecuteMail) PopulateConfig(e *Execute) error {
+func (d *ExecuteMail) populateConfig(e *Execute) error {
 	d.config = e.mailConf
 	return d.config.Validate()
 }

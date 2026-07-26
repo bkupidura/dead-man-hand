@@ -185,7 +185,7 @@ func vaultAliveHandler(v vault.VaultInterface) func(http.ResponseWriter, *http.R
 // testActionHandler allow to execute action for test.
 func testActionHandler(e execute.ExecuteInterface, authConfig auth.Config) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		request := &addTestActionRequest{}
+		request := &addTestActionRequest{execute: e}
 		if err := render.Bind(r, request); err != nil {
 			log.Printf("wrong request data provided: %s", err)
 			render.Render(w, r, StatusErrInvalidRequest(err))
@@ -227,6 +227,7 @@ type addTestActionRequest struct {
 	Comment      string `json:"comment"`
 	ProcessAfter int    `json:"process_after"`
 	MinInterval  int    `json:"min_interval"`
+	execute      execute.ExecuteInterface
 }
 
 // Bind validates addTestActionRequest.
@@ -242,16 +243,13 @@ func (req *addTestActionRequest) Bind(r *http.Request) error {
 		return err
 	}
 
-	if _, err := execute.UnmarshalActionData(a); err != nil {
-		return err
-	}
-	return nil
+	return req.execute.CheckAction(a)
 }
 
 // addActionhandler adds new action to State.
-func addActionHandler(s state.StateInterface, authConfig auth.Config) func(http.ResponseWriter, *http.Request) {
+func addActionHandler(s state.StateInterface, e execute.ExecuteInterface, authConfig auth.Config) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		request := &addTestActionRequest{}
+		request := &addTestActionRequest{execute: e}
 		if err := render.Bind(r, request); err != nil {
 			log.Printf("wrong request data provided: %s", err)
 			render.Render(w, r, StatusErrInvalidRequest(err))

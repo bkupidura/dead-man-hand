@@ -369,7 +369,7 @@ func TestMailPopulate(t *testing.T) {
 	}
 	for _, test := range tests {
 		plugin := test.inputPlugin
-		err := plugin.Populate(test.inputAction)
+		err := plugin.populate(test.inputAction)
 		if test.expectedError == "" {
 			require.Nil(t, err)
 		} else {
@@ -516,7 +516,7 @@ func TestMailPopulateConfig(t *testing.T) {
 	}
 	for _, test := range tests {
 		plugin := &ExecuteMail{}
-		err := plugin.PopulateConfig(test.inputExecute)
+		err := plugin.populateConfig(test.inputExecute)
 		require.Equal(t, test.expectedError, err)
 		require.Equal(t, test.expectedConfig, plugin.config)
 	}

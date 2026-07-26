@@ -76,7 +76,7 @@ func (d *ExecuteBulkSMS) Run() error {
 	return nil
 }
 
-func (d *ExecuteBulkSMS) Populate(a *state.Action) error {
+func (d *ExecuteBulkSMS) populate(a *state.Action) error {
 	err := json.Unmarshal([]byte(a.Data), &d)
 	if err != nil {
 		return err
@@ -114,7 +114,7 @@ func (c *BulkSMSConfig) Validate() error {
 	return nil
 }
 
-func (d *ExecuteBulkSMS) PopulateConfig(e *Execute) error {
+func (d *ExecuteBulkSMS) populateConfig(e *Execute) error {
 	d.config = e.bulkSMSConf
 	return d.config.Validate()
 }

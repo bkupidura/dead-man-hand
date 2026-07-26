@@ -833,3 +833,112 @@ func TestGetMailConfig(t *testing.T) {
 		}
 	}
 }
+
+func TestGetExecConfig(t *testing.T) {
+	tests := []struct {
+		koanfFunc      func() *koanf.Koanf
+		shouldPanic    bool
+		expectedConfig execute.ExecConfig
+	}{
+		{
+			koanfFunc: func() *koanf.Koanf {
+				b := []byte(`
+                                execute:
+                                  plugin:
+                                    exec:
+                                      allowed_paths:
+                                        nested: value
+                                `)
+				k := koanf.New(".")
+				err := k.Load(rawbytes.Provider(b), yaml.Parser())
+				require.Nil(t, err)
+				return k
+			},
+			shouldPanic: true,
+		},
+		{
+			koanfFunc: func() *koanf.Koanf {
+				b := []byte(`
+                                execute:
+                                  plugin:
+                                    missing:
+                                      data: 10
+                                `)
+				k := koanf.New(".")
+				err := k.Load(rawbytes.Provider(b), yaml.Parser())
+				require.Nil(t, err)
+				return k
+			},
+			expectedConfig: execute.ExecConfig{},
+		},
+		{
+			koanfFunc: func() *koanf.Koanf {
+				b := []byte(`
+                                execute:
+                                  plugin:
+                                    exec:
+                                      allowed_paths:
+                                        - /usr/local/bin/script.sh
+                                      denied_paths:
+                                        - /usr/local/bin/dangerous.sh
+                                `)
+				k := koanf.New(".")
+				err := k.Load(rawbytes.Provider(b), yaml.Parser())
+				require.Nil(t, err)
+				return k
+			},
+			expectedConfig: execute.ExecConfig{
+				AllowedPaths: []string{"/usr/local/bin/script.sh"},
+				DeniedPaths:  []string{"/usr/local/bin/dangerous.sh"},
+				MaxTimeout:   300,
+			},
+		},
+		{
+			koanfFunc: func() *koanf.Koanf {
+				b := []byte(`
+                                execute:
+                                  plugin:
+                                    exec:
+                                      allowed_paths:
+                                        - /usr/local/bin/script.sh
+                                      max_timeout: 600
+                                `)
+				k := koanf.New(".")
+				err := k.Load(rawbytes.Provider(b), yaml.Parser())
+				require.Nil(t, err)
+				return k
+			},
+			expectedConfig: execute.ExecConfig{
+				AllowedPaths: []string{"/usr/local/bin/script.sh"},
+				MaxTimeout:   600,
+			},
+		},
+		{
+			koanfFunc: func() *koanf.Koanf {
+				b := []byte(`
+                                execute:
+                                  plugin:
+                                    exec:
+                                      allowed_paths:
+                                        - relative/path.sh
+                                `)
+				k := koanf.New(".")
+				err := k.Load(rawbytes.Provider(b), yaml.Parser())
+				require.Nil(t, err)
+				return k
+			},
+			shouldPanic: true,
+		},
+	}
+	for _, test := range tests {
+		k := test.koanfFunc()
+		if test.shouldPanic {
+			require.Panics(t, func() {
+				getExecConfig(k)
+			})
+		} else {
+			config := getExecConfig(k)
+			require.Equal(t, test.expectedConfig, config)
+		}
+	}
+}

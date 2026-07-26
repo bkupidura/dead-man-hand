@@ -57,7 +57,7 @@ func TestDummyPopulate(t *testing.T) {
 	}
 	for _, test := range tests {
 		plugin := test.inputPlugin
-		err := plugin.Populate(test.inputAction)
+		err := plugin.populate(test.inputAction)
 		if test.expectedError == "" {
 			require.Nil(t, err)
 		} else {
@@ -82,7 +82,7 @@ func TestDummyPopulateConfig(t *testing.T) {
 	}
 	for _, test := range tests {
 		plugin := test.inputPlugin
-		err := plugin.PopulateConfig(&Execute{})
+		err := plugin.populateConfig(&Execute{})
 		require.Equal(t, test.expectedError, err)
 	}
 }

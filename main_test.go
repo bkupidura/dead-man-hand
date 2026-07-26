@@ -91,6 +91,11 @@ func (e *mockExecute) Run(action *state.Action) error {
 	return args.Error(0)
 }
 
+func (e *mockExecute) CheckAction(action *state.Action) error {
+	args := e.Called(action)
+	return args.Error(0)
+}
+
 func TestReadingConfig(t *testing.T) {
 	tests := []struct {
 		inputConfig  func()

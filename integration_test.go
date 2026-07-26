@@ -1159,6 +1159,75 @@ func TestDMHInvalidMailConfig(t *testing.T) {
 	}
 }
 
+func TestDMHInvalidExecConfig(t *testing.T) {
+	stateFile := "integration_test_invalid_exec_state.json"
+	configFile := "integration_test_invalid_exec_config.yaml"
+
+	tests := []struct {
+		inputExecConf     string
+		expectedLogSubstr string
+	}{
+		{
+			inputExecConf: `
+          allowed_paths:
+            nested: value`,
+			expectedLogSubstr: "unable to unmarshal config",
+		},
+		{
+			inputExecConf: `
+          allowed_paths:
+            - relative/path`,
+			expectedLogSubstr: "invalid execute.plugin.exec config",
+		},
+	}
+	for _, test := range tests {
+		defer os.Remove(stateFile)
+		defer os.Remove(configFile)
+
+		f, err := os.Create(configFile)
+		require.Nil(t, err)
+		_, err = f.WriteString(fmt.Sprintf(`
+    components:
+      - dmh
+    auth:
+      enabled: false
+    state:
+      file: %s
+    remote_vault:
+      url: http://127.0.0.1:8080
+      client_uuid: test-client-uuid
+      token: test-token
+    execute:
+      plugin:
+        exec:%s
+    `, stateFile, test.inputExecConf))
+		require.Nil(t, err)
+		f.Close()
+
+		err = os.Setenv("DMH_CONFIG_FILE", configFile)
+		require.Nil(t, err)
+		defer os.Unsetenv("DMH_CONFIG_FILE")
+
+		oldHTTPPort := api.HTTPPort
+		api.HTTPPort = 18092
+		defer func() { api.HTTPPort = oldHTTPPort }()
+
+		oldMetricInitialize := metricInitialize
+		metricInitialize = func(opts *metric.Options) *metric.PromCollector {
+			opts.Registry = prometheus.NewRegistry()
+			return metric.Initialize(opts)
+		}
+		defer func() { metricInitialize = oldMetricInitialize }()
+
+		logBuf := &syncBuffer{}
+		log.SetOutput(logBuf)
+		defer log.SetOutput(os.Stderr)
+
+		require.Panics(t, main)
+		require.Contains(t, logBuf.String(), test.expectedLogSubstr)
+	}
+}
+
 func TestDMHStateFileCorrupt(t *testing.T) {
 	stateFile := "integration_test_corrupt_state.json"
 	configFile := "integration_test_corrupt_state_config.yaml"

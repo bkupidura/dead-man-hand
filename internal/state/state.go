@@ -34,7 +34,7 @@ var (
 	jsonMarshal = json.Marshal
 	// httpClient is used for the outbound http connections.
 	httpClient       = &http.Client{Timeout: httpClientTimeout}
-	knownActionKinds = []string{"dummy", "json_post", "mail", "bulksms"}
+	knownActionKinds = []string{"dummy", "json_post", "mail", "bulksms", "exec"}
 )
 
 // Action stores user actions.

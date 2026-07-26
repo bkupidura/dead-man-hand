@@ -52,7 +52,7 @@ func NewRouter(opts *Options) *chi.Mux {
 			})
 			r.Route("/api/action/store", func(r chi.Router) {
 				r.Get("/", listActionsHandler(opts.State))
-				r.Post("/", addActionHandler(opts.State, opts.Auth))
+				r.Post("/", addActionHandler(opts.State, opts.Execute, opts.Auth))
 				r.Route("/{actionUUID}", func(r chi.Router) {
 					r.Get("/", getActionHandler(opts.State))
 					r.Delete("/", deleteActionHandler(opts.State))
