@@ -210,11 +210,17 @@ func genAgeKey(ctx context.Context, cmd *cli.Command) error {
 	return nil
 }
 func main() {
+	os.Exit(run(os.Args, os.Stderr))
+}
+
+// run executes the CLI with args and returns the process exit code.
+func run(args []string, stderr io.Writer) int {
 	cmd := createCLI()
-	if err := cmd.Run(context.Background(), os.Args); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
+	if err := cmd.Run(context.Background(), args); err != nil {
+		fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 1
 	}
+	return 0
 }
 
 // actionData can unmarshal from both a YAML string and a YAML object/mapping.

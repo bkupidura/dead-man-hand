@@ -45,7 +45,7 @@ Required services:
 ```
 7. Generate bearer token for `DMH` -> `Vault` communication
 ```
-dmh-cli auth generate-bearer
+dmh-cli crypt generate-bearer
 ```
 8. Configure `CONFIG` dict in `lambda-vault.py`:
   - `process_unit` - time unit (`minute`, `hour`) used to decide when secret should be released. It should match `action.process_unit` from `DMH` config.
