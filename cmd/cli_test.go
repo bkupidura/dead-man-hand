@@ -710,6 +710,35 @@ func TestCreateCLI(t *testing.T) {
 	require.ElementsMatch(t, []string{"alive", "action", "crypt"}, cmdNames)
 }
 
+func TestRun(t *testing.T) {
+	tests := []struct {
+		inputArgs     []string
+		expectedCode  int
+		expectedError string
+	}{
+		{
+			inputArgs:    []string{"dmh-cli", "crypt", "generate-bearer"},
+			expectedCode: 0,
+		},
+		{
+			inputArgs:     []string{"dmh-cli", "action", "delete"},
+			expectedCode:  1,
+			expectedError: `Required flag "uuid" not set`,
+		},
+	}
+	for _, test := range tests {
+		var stderr bytes.Buffer
+		code := run(test.inputArgs, &stderr)
+
+		require.Equal(t, test.expectedCode, code)
+		if test.expectedError != "" {
+			require.Contains(t, stderr.String(), test.expectedError)
+		} else {
+			require.Empty(t, stderr.String())
+		}
+	}
+}
+
 func TestDoRequest(t *testing.T) {
 	tests := []struct {
 		method         string
