@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -140,6 +141,7 @@ func (d *ExecuteExec) populate(a *state.Action) error {
 	if !strings.HasPrefix(d.Path, "/") {
 		return fmt.Errorf("path must be an absolute path")
 	}
+	d.Path = filepath.Clean(d.Path)
 	if !pathIsPermitted(d.config, d.Path) {
 		return fmt.Errorf("path %s is not permitted by execute.plugin.exec config", d.Path)
 	}
