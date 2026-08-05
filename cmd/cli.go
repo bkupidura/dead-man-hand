@@ -185,8 +185,8 @@ func genBearer(ctx context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stdout, "BearerToken: %s\n", token.Plaintext)
-	fmt.Fprintf(os.Stdout, "SHA256: %s\n", token.Hash)
+	fmt.Fprintf(cmd.Writer, "BearerToken: %s\n", token.Plaintext)
+	fmt.Fprintf(cmd.Writer, "SHA256: %s\n", token.Hash)
 	return nil
 }
 
@@ -196,7 +196,7 @@ func genSignedSecret(ctx context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stdout, "SignedURLSecret: %s\n", secret)
+	fmt.Fprintf(cmd.Writer, "SignedURLSecret: %s\n", secret)
 	return nil
 }
 
@@ -206,17 +206,25 @@ func genAgeKey(ctx context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stdout, "PrivateKey: %s\n", ageInterface.GetPrivateKey())
+	fmt.Fprintf(cmd.Writer, "PrivateKey: %s\n", ageInterface.GetPrivateKey())
 	return nil
 }
 func main() {
-	os.Exit(run(os.Args, os.Stderr))
+	os.Exit(run(os.Args, os.Stdout, os.Stderr))
+}
+
+// runCmd builds the CLI and executes it, wiring stdout/stderr into the
+// cli.Command itself so its own usage and error output honors them too.
+func runCmd(args []string, stdout, stderr io.Writer) error {
+	cmd := createCLI()
+	cmd.Writer = stdout
+	cmd.ErrWriter = stderr
+	return cmd.Run(context.Background(), args)
 }
 
 // run executes the CLI with args and returns the process exit code.
-func run(args []string, stderr io.Writer) int {
-	cmd := createCLI()
-	if err := cmd.Run(context.Background(), args); err != nil {
+func run(args []string, stdout, stderr io.Writer) int {
+	if err := runCmd(args, stdout, stderr); err != nil {
 		fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 1
 	}
@@ -361,7 +369,7 @@ func processActionsFromFile(cmd *cli.Command, path string, send func(*cli.Comman
 	var failed int
 	for i, action := range actions {
 		if err := send(cmd, action); err != nil {
-			fmt.Fprintf(os.Stderr, "action %d: %s\n", i+1, err)
+			fmt.Fprintf(cmd.ErrWriter, "action %d: %s\n", i+1, err)
 			failed++
 		}
 	}
@@ -408,7 +416,7 @@ func listActions(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("server returned status %d: %s", resp.StatusCode, string(body))
 	}
 
-	_, err = io.Copy(os.Stdout, resp.Body)
+	_, err = io.Copy(cmd.Writer, resp.Body)
 	return err
 }
 
@@ -419,7 +427,7 @@ func addAction(ctx context.Context, cmd *cli.Command) error {
 		if err := processActionsFromFile(cmd, filePath, createAction); err != nil {
 			return err
 		}
-		fmt.Println("Actions added successfully")
+		fmt.Fprintln(cmd.Writer, "Actions added successfully")
 		return nil
 	}
 
@@ -433,7 +441,7 @@ func addAction(ctx context.Context, cmd *cli.Command) error {
 		return err
 	}
 
-	fmt.Println("Action added successfully")
+	fmt.Fprintln(cmd.Writer, "Action added successfully")
 	return nil
 }
 
@@ -461,7 +469,7 @@ func deleteAction(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("server returned status %d: %s", resp.StatusCode, string(body))
 	}
 
-	fmt.Println("Action deleted successfully")
+	fmt.Fprintln(cmd.Writer, "Action deleted successfully")
 	return nil
 }
 
@@ -472,7 +480,7 @@ func testAction(ctx context.Context, cmd *cli.Command) error {
 		if err := processActionsFromFile(cmd, filePath, sendTestAction); err != nil {
 			return err
 		}
-		fmt.Println("Actions tested successfully")
+		fmt.Fprintln(cmd.Writer, "Actions tested successfully")
 		return nil
 	}
 
@@ -484,6 +492,6 @@ func testAction(ctx context.Context, cmd *cli.Command) error {
 		return err
 	}
 
-	fmt.Println("Action tested successfully")
+	fmt.Fprintln(cmd.Writer, "Action tested successfully")
 	return nil
 }

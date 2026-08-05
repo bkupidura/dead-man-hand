@@ -630,20 +630,9 @@ func TestActionDataUnmarshalYAML(t *testing.T) {
 // captureCLIOutput runs the CLI with the given args and returns captured stdout.
 func captureCLIOutput(t *testing.T, args ...string) (string, error) {
 	t.Helper()
-	old := os.Stdout
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-	os.Stdout = w
-
-	cmd := createCLI()
-	runErr := cmd.Run(context.Background(), args)
-
-	w.Close()
-	os.Stdout = old
-
-	var buf bytes.Buffer
-	_, _ = io.Copy(&buf, r)
-	return buf.String(), runErr
+	var stdout, stderr bytes.Buffer
+	err := runCmd(args, &stdout, &stderr)
+	return stdout.String(), err
 }
 
 func TestGenBearer(t *testing.T) {
@@ -727,14 +716,15 @@ func TestRun(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
-		var stderr bytes.Buffer
-		code := run(test.inputArgs, &stderr)
+		var stdout, stderr bytes.Buffer
+		code := run(test.inputArgs, &stdout, &stderr)
 
 		require.Equal(t, test.expectedCode, code)
 		if test.expectedError != "" {
 			require.Contains(t, stderr.String(), test.expectedError)
 		} else {
 			require.Empty(t, stderr.String())
+			require.Contains(t, stdout.String(), "BearerToken:")
 		}
 	}
 }
@@ -1016,11 +1006,12 @@ func TestProcessActionsFromFile(t *testing.T) {
   process_after: 24
 `
 	tests := []struct {
-		inputFile     string
-		fileContent   string
-		failFirstSend bool
-		expectedError string
-		expectedSent  int
+		inputFile      string
+		fileContent    string
+		failFirstSend  bool
+		expectedError  string
+		expectedSent   int
+		expectedStderr string
 	}{
 		{
 			inputFile:     "/nonexistent/actions.yaml",
@@ -1032,11 +1023,12 @@ func TestProcessActionsFromFile(t *testing.T) {
 			expectedError: "no actions found in file",
 		},
 		{
-			inputFile:     "testdata/process-partial-failure.yaml",
-			fileContent:   twoActionsYAML,
-			failFirstSend: true,
-			expectedError: "1 of 2 actions failed",
-			expectedSent:  2,
+			inputFile:      "testdata/process-partial-failure.yaml",
+			fileContent:    twoActionsYAML,
+			failFirstSend:  true,
+			expectedError:  "1 of 2 actions failed",
+			expectedSent:   2,
+			expectedStderr: "action 1: forced send error\n",
 		},
 		{
 			inputFile:    "testdata/process-all-success.yaml",
@@ -1049,9 +1041,10 @@ func TestProcessActionsFromFile(t *testing.T) {
   data: '{"test": true}'
   process_after: 10
 `,
-			failFirstSend: true,
-			expectedError: "1 of 1 actions failed",
-			expectedSent:  1,
+			failFirstSend:  true,
+			expectedError:  "1 of 1 actions failed",
+			expectedSent:   1,
+			expectedStderr: "action 1: forced send error\n",
 		},
 	}
 
@@ -1073,7 +1066,8 @@ func TestProcessActionsFromFile(t *testing.T) {
 			return nil
 		}
 
-		err := processActionsFromFile(nil, test.inputFile, send)
+		var stderr bytes.Buffer
+		err := processActionsFromFile(&cli.Command{ErrWriter: &stderr}, test.inputFile, send)
 
 		if test.expectedError != "" {
 			require.Error(t, err)
@@ -1082,6 +1076,7 @@ func TestProcessActionsFromFile(t *testing.T) {
 			require.NoError(t, err)
 		}
 		require.Equal(t, test.expectedSent, sent)
+		require.Equal(t, test.expectedStderr, stderr.String())
 	}
 }
 
