@@ -98,50 +98,76 @@ func TestExecuteExecPopulate(t *testing.T) {
 		inputPlugin   *ExecuteExec
 		inputAction   *state.Action
 		expectedError string
+		expectedPath  string
 	}{
 		{
 			inputPlugin:   &ExecuteExec{},
 			inputAction:   &state.Action{Kind: "exec", Data: `{"broken"`},
 			expectedError: "unexpected end of JSON input",
+			expectedPath:  "",
 		},
 		{
 			inputPlugin:   &ExecuteExec{},
 			inputAction:   &state.Action{Kind: "exec", Data: `{"path": "relative/path"}`},
 			expectedError: "path must be an absolute path",
+			expectedPath:  "relative/path",
 		},
 		{
 			inputPlugin:   &ExecuteExec{config: ExecConfig{AllowedPaths: []string{"/other/path"}}},
 			inputAction:   &state.Action{Kind: "exec", Data: `{"path": "/usr/local/bin/script.sh"}`},
 			expectedError: "path /usr/local/bin/script.sh is not permitted by execute.plugin.exec config",
+			expectedPath:  "/usr/local/bin/script.sh",
+		},
+		{
+			inputPlugin:   &ExecuteExec{config: ExecConfig{AllowedPaths: []string{"/usr/local/bin/"}, MaxTimeout: 300}},
+			inputAction:   &state.Action{Kind: "exec", Data: `{"path": "/usr/local/bin/../../bin/sh", "timeout": 30, "exit_code": [0]}`},
+			expectedError: "path /usr/bin/sh is not permitted by execute.plugin.exec config",
+			expectedPath:  "/usr/bin/sh",
+		},
+		{
+			inputPlugin:  &ExecuteExec{config: ExecConfig{AllowedPaths: []string{"/usr/local/bin/"}, MaxTimeout: 300}},
+			inputAction:  &state.Action{Kind: "exec", Data: `{"path": "/usr/local/bin/../bin/script.sh", "timeout": 30, "exit_code": [0]}`},
+			expectedPath: "/usr/local/bin/script.sh",
+		},
+		{
+			inputPlugin:  &ExecuteExec{config: ExecConfig{AllowedPaths: []string{"/usr/local/bin/script.sh"}, MaxTimeout: 300}},
+			inputAction:  &state.Action{Kind: "exec", Data: `{"path": "/usr/local/bin/./script.sh", "timeout": 30, "exit_code": [0]}`},
+			expectedPath: "/usr/local/bin/script.sh",
 		},
 		{
 			inputPlugin:   &ExecuteExec{config: ExecConfig{AllowedPaths: []string{"/usr/local/bin/script.sh"}, MaxTimeout: 300}},
 			inputAction:   &state.Action{Kind: "exec", Data: `{"path": "/usr/local/bin/script.sh"}`},
 			expectedError: "timeout must be provided",
+			expectedPath:  "/usr/local/bin/script.sh",
 		},
 		{
 			inputPlugin:   &ExecuteExec{config: ExecConfig{AllowedPaths: []string{"/usr/local/bin/script.sh"}, MaxTimeout: 300}},
 			inputAction:   &state.Action{Kind: "exec", Data: `{"path": "/usr/local/bin/script.sh", "timeout": 301}`},
 			expectedError: "timeout must not exceed 300 seconds",
+			expectedPath:  "/usr/local/bin/script.sh",
 		},
 		{
 			inputPlugin:   &ExecuteExec{config: ExecConfig{AllowedPaths: []string{"/usr/local/bin/script.sh"}, MaxTimeout: 60}},
 			inputAction:   &state.Action{Kind: "exec", Data: `{"path": "/usr/local/bin/script.sh", "timeout": 61}`},
 			expectedError: "timeout must not exceed 60 seconds",
+			expectedPath:  "/usr/local/bin/script.sh",
 		},
 		{
 			inputPlugin:   &ExecuteExec{config: ExecConfig{AllowedPaths: []string{"/usr/local/bin/script.sh"}, MaxTimeout: 300}},
 			inputAction:   &state.Action{Kind: "exec", Data: `{"path": "/usr/local/bin/script.sh", "timeout": 30}`},
 			expectedError: "exit_code must be provided",
+			expectedPath:  "/usr/local/bin/script.sh",
 		},
 		{
 			inputPlugin:   &ExecuteExec{config: ExecConfig{AllowedPaths: []string{"/usr/local/bin/script.sh"}, MaxTimeout: 300}},
 			inputAction:   &state.Action{Kind: "exec", Data: `{"path": "/usr/local/bin/script.sh", "timeout": 30, "exit_code": [0], "output_regex": "[invalid("}`},
 			expectedError: "output_regex is not a valid regex: error parsing regexp: missing closing ]: `[invalid(`",
+			expectedPath:  "/usr/local/bin/script.sh",
 		},
 		{
-			inputPlugin: &ExecuteExec{config: ExecConfig{AllowedPaths: []string{"/usr/local/bin/script.sh"}, MaxTimeout: 300}},
-			inputAction: &state.Action{Kind: "exec", Data: `{"path": "/usr/local/bin/script.sh", "args": ["--full"], "timeout": 30, "exit_code": [0], "output_regex": "^ok$"}`},
+			inputPlugin:  &ExecuteExec{config: ExecConfig{AllowedPaths: []string{"/usr/local/bin/script.sh"}, MaxTimeout: 300}},
+			inputAction:  &state.Action{Kind: "exec", Data: `{"path": "/usr/local/bin/script.sh", "args": ["--full"], "timeout": 30, "exit_code": [0], "output_regex": "^ok$"}`},
+			expectedPath: "/usr/local/bin/script.sh",
 		},
 	}
 	for _, test := range tests {
@@ -153,6 +179,7 @@ func TestExecuteExecPopulate(t *testing.T) {
 			require.NotNil(t, err)
 			require.Equal(t, test.expectedError, err.Error())
 		}
+		require.Equal(t, test.expectedPath, plugin.Path)
 	}
 }
 
