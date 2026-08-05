@@ -630,20 +630,9 @@ func TestActionDataUnmarshalYAML(t *testing.T) {
 // captureCLIOutput runs the CLI with the given args and returns captured stdout.
 func captureCLIOutput(t *testing.T, args ...string) (string, error) {
 	t.Helper()
-	old := os.Stdout
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-	os.Stdout = w
-
-	cmd := createCLI()
-	runErr := cmd.Run(context.Background(), args)
-
-	w.Close()
-	os.Stdout = old
-
-	var buf bytes.Buffer
-	_, _ = io.Copy(&buf, r)
-	return buf.String(), runErr
+	var stdout, stderr bytes.Buffer
+	err := runCmd(args, &stdout, &stderr)
+	return stdout.String(), err
 }
 
 func TestGenBearer(t *testing.T) {
@@ -727,8 +716,8 @@ func TestRun(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
-		var stderr bytes.Buffer
-		code := run(test.inputArgs, &stderr)
+		var stdout, stderr bytes.Buffer
+		code := run(test.inputArgs, &stdout, &stderr)
 
 		require.Equal(t, test.expectedCode, code)
 		if test.expectedError != "" {
@@ -1073,7 +1062,7 @@ func TestProcessActionsFromFile(t *testing.T) {
 			return nil
 		}
 
-		err := processActionsFromFile(nil, test.inputFile, send)
+		err := processActionsFromFile(&cli.Command{ErrWriter: io.Discard}, test.inputFile, send)
 
 		if test.expectedError != "" {
 			require.Error(t, err)
