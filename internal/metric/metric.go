@@ -13,10 +13,12 @@ import (
 )
 
 var (
-	collectInterval     = 10
-	collectIntervalUnit = time.Second
-	collectSlowInterval = 12
-	collectSlowUnit     = time.Hour
+	collectInterval       = 10
+	collectIntervalUnit   = time.Second
+	collectSlowInterval   = 12
+	collectSlowUnit       = time.Hour
+	secretCheckRetries    = 3
+	secretCheckRetryDelay = 2 * time.Second
 )
 
 type PromCollector struct {
@@ -168,26 +170,7 @@ func (p *PromCollector) collectSlow() {
 						continue
 					}
 
-					req, err := http.NewRequest(http.MethodHead, secretUrl, nil)
-					if err != nil {
-						p.dmhMissingSecretsTotal.WithLabelValues(a.UUID).Add(1)
-						continue
-					}
-					if p.vaultToken != "" {
-						req.Header.Set("Authorization", "Bearer "+p.vaultToken)
-					}
-
-					client := http.Client{
-						Timeout: 3 * time.Second,
-					}
-					reg, err := client.Do(req)
-
-					if err != nil {
-						p.dmhMissingSecretsTotal.WithLabelValues(a.UUID).Add(1)
-						continue
-					}
-					reg.Body.Close()
-					if reg.StatusCode != http.StatusOK && reg.StatusCode != http.StatusLocked {
+					if !p.secretExists(secretUrl) {
 						p.dmhMissingSecretsTotal.WithLabelValues(a.UUID).Add(1)
 						continue
 					}
@@ -197,4 +180,33 @@ func (p *PromCollector) collectSlow() {
 			return
 		}
 	}
+}
+
+// secretExists checks if secret is present.
+func (p *PromCollector) secretExists(secretUrl string) bool {
+	req, err := http.NewRequest(http.MethodHead, secretUrl, nil)
+	if err != nil {
+		return false
+	}
+	if p.vaultToken != "" {
+		req.Header.Set("Authorization", "Bearer "+p.vaultToken)
+	}
+
+	client := http.Client{
+		Timeout: 3 * time.Second,
+	}
+
+	for attempt := 1; attempt <= secretCheckRetries; attempt++ {
+		resp, err := client.Do(req)
+		if err == nil {
+			resp.Body.Close()
+			if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusLocked {
+				return true
+			}
+		}
+		if attempt < secretCheckRetries {
+			time.Sleep(secretCheckRetryDelay)
+		}
+	}
+	return false
 }
