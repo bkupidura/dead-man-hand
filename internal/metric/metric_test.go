@@ -221,136 +221,45 @@ func TestCollectSlow(t *testing.T) {
 				s := new(mockState)
 				s.On("GetActions").Return([]*state.EncryptedAction{
 					{Processed: 0, UUID: "uuid1", EncryptionMeta: state.EncryptionMeta{VaultURL: server200.URL}},
+					{Processed: 2, UUID: "uuid2", EncryptionMeta: state.EncryptionMeta{VaultURL: "http://invalid-url"}},
 				})
 				return &Options{State: s, Registry: reg}
 			},
 			expectedRegexp: []*regexp.Regexp{},
 			notExpectedRegexp: []*regexp.Regexp{
 				regexp.MustCompile(`dmh_missing_secrets_total{action="uuid1"}`),
-			},
-		},
-		{
-			inputOptions: func() *Options {
-				reg := prometheus.NewRegistry()
-				server423 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					w.WriteHeader(423)
-				}))
-				s := new(mockState)
-				s.On("GetActions").Return([]*state.EncryptedAction{
-					{Processed: 0, UUID: "uuid1", EncryptionMeta: state.EncryptionMeta{VaultURL: server423.URL}},
-				})
-				return &Options{State: s, Registry: reg}
-			},
-			expectedRegexp: []*regexp.Regexp{},
-			notExpectedRegexp: []*regexp.Regexp{
-				regexp.MustCompile(`dmh_missing_secrets_total{action="uuid1"}`),
-			},
-		},
-		{
-			inputOptions: func() *Options {
-				reg := prometheus.NewRegistry()
-				s := new(mockState)
-				s.On("GetActions").Return([]*state.EncryptedAction{
-					{Processed: 0, UUID: "uuid1", EncryptionMeta: state.EncryptionMeta{VaultURL: ""}},
-				})
-				return &Options{State: s, Registry: reg}
-			},
-			expectedRegexp: []*regexp.Regexp{
-				regexp.MustCompile(`dmh_missing_secrets_total{action="uuid1"} 1`),
-			},
-			notExpectedRegexp: []*regexp.Regexp{},
-		},
-		{
-			inputOptions: func() *Options {
-				reg := prometheus.NewRegistry()
-				s := new(mockState)
-				s.On("GetActions").Return([]*state.EncryptedAction{
-					{Processed: 0, UUID: "uuid1", EncryptionMeta: state.EncryptionMeta{VaultURL: "http://invalid-url"}},
-				})
-				return &Options{State: s, Registry: reg}
-			},
-			expectedRegexp: []*regexp.Regexp{
-				regexp.MustCompile(`dmh_missing_secrets_total{action="uuid1"} 1`),
-			},
-			notExpectedRegexp: []*regexp.Regexp{},
-		},
-		{
-			inputOptions: func() *Options {
-				reg := prometheus.NewRegistry()
-				server500 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					w.WriteHeader(500)
-				}))
-				s := new(mockState)
-				s.On("GetActions").Return([]*state.EncryptedAction{
-					{Processed: 0, UUID: "uuid1", EncryptionMeta: state.EncryptionMeta{VaultURL: server500.URL}},
-				})
-				return &Options{State: s, Registry: reg}
-			},
-			expectedRegexp: []*regexp.Regexp{
-				regexp.MustCompile(`dmh_missing_secrets_total{action="uuid1"} 1`),
-			},
-			notExpectedRegexp: []*regexp.Regexp{},
-		},
-		{
-			inputOptions: func() *Options {
-				reg := prometheus.NewRegistry()
-				server404 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					w.WriteHeader(404)
-				}))
-				s := new(mockState)
-				s.On("GetActions").Return([]*state.EncryptedAction{
-					{Processed: 0, UUID: "uuid1", EncryptionMeta: state.EncryptionMeta{VaultURL: server404.URL}},
-				})
-				return &Options{State: s, Registry: reg}
-			},
-			expectedRegexp: []*regexp.Regexp{
-				regexp.MustCompile(`dmh_missing_secrets_total{action="uuid1"} 1`),
-			},
-			notExpectedRegexp: []*regexp.Regexp{},
-		},
-		{
-			inputOptions: func() *Options {
-				reg := prometheus.NewRegistry()
-				server200 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					require.Equal(t, "Bearer test-vault-token", r.Header.Get("Authorization"))
-					w.WriteHeader(200)
-				}))
-				server423 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					w.WriteHeader(423)
-				}))
-				server500 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					w.WriteHeader(500)
-				}))
-				s := new(mockState)
-				s.On("GetActions").Return([]*state.EncryptedAction{
-					{Processed: 0, UUID: "uuid1", EncryptionMeta: state.EncryptionMeta{VaultURL: ""}},
-					{Processed: 1, UUID: "uuid2", EncryptionMeta: state.EncryptionMeta{VaultURL: server423.URL}},
-					{Processed: 0, UUID: "uuid3", EncryptionMeta: state.EncryptionMeta{VaultURL: server200.URL}},
-					{Processed: 0, UUID: "uuid4", EncryptionMeta: state.EncryptionMeta{VaultURL: server500.URL}},
-					{Processed: 2, UUID: "uuid5", EncryptionMeta: state.EncryptionMeta{VaultURL: "http://invalid-url"}},
-					{Processed: 0, UUID: "uuid6", EncryptionMeta: state.EncryptionMeta{VaultURL: "http://invalid-url"}},
-					{Processed: 0, UUID: "uuid7", EncryptionMeta: state.EncryptionMeta{VaultURL: "http://invalid-url\r"}},
-				})
-				return &Options{State: s, Registry: reg, VaultToken: "test-vault-token"}
-			},
-			expectedRegexp: []*regexp.Regexp{
-				regexp.MustCompile(`dmh_missing_secrets_total{action="uuid1"} 1`),
-				regexp.MustCompile(`dmh_missing_secrets_total{action="uuid4"} 1`),
-				regexp.MustCompile(`dmh_missing_secrets_total{action="uuid6"} 1`),
-				regexp.MustCompile(`dmh_missing_secrets_total{action="uuid7"} 1`),
-			},
-			notExpectedRegexp: []*regexp.Regexp{
 				regexp.MustCompile(`dmh_missing_secrets_total{action="uuid2"}`),
-				regexp.MustCompile(`dmh_missing_secrets_total{action="uuid3"}`),
-				regexp.MustCompile(`dmh_missing_secrets_total{action="uuid5"}`),
 			},
+		},
+		{
+			inputOptions: func() *Options {
+				reg := prometheus.NewRegistry()
+				server500 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(500)
+				}))
+				s := new(mockState)
+				s.On("GetActions").Return([]*state.EncryptedAction{
+					{Processed: 0, UUID: "uuid1", EncryptionMeta: state.EncryptionMeta{VaultURL: ""}},
+					{Processed: 0, UUID: "uuid2", EncryptionMeta: state.EncryptionMeta{VaultURL: server500.URL}},
+				})
+				return &Options{State: s, Registry: reg}
+			},
+			expectedRegexp: []*regexp.Regexp{
+				regexp.MustCompile(`dmh_missing_secrets_total{action="uuid1"} 1`),
+				regexp.MustCompile(`dmh_missing_secrets_total{action="uuid2"} 1`),
+			},
+			notExpectedRegexp: []*regexp.Regexp{},
 		},
 	}
 	collectSlowInterval = 2
 	collectSlowUnit = time.Second
+	secretCheckRetries = 1
+	secretCheckRetryDelay = time.Millisecond
 	defer func() {
 		collectSlowInterval = 12
 		collectSlowUnit = time.Hour
+		secretCheckRetries = 3
+		secretCheckRetryDelay = 2 * time.Second
 	}()
 
 	for _, test := range tests {
@@ -378,6 +287,123 @@ func TestCollectSlow(t *testing.T) {
 				require.NotRegexp(t, r, string(body))
 			}
 		}
+	}
+}
+
+func TestSecretExists(t *testing.T) {
+	tests := []struct {
+		inputVaultToken  string
+		inputSetup       func() (url string, attempts *int)
+		expectedResult   bool
+		expectedAttempts int
+	}{
+		{
+			inputSetup: func() (string, *int) {
+				attempts := new(int)
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					*attempts++
+					w.WriteHeader(200)
+				}))
+				return server.URL, attempts
+			},
+			expectedResult:   true,
+			expectedAttempts: 1,
+		},
+		{
+			inputSetup: func() (string, *int) {
+				attempts := new(int)
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					*attempts++
+					w.WriteHeader(423)
+				}))
+				return server.URL, attempts
+			},
+			expectedResult:   true,
+			expectedAttempts: 1,
+		},
+		{
+			inputSetup: func() (string, *int) {
+				return "http://invalid-url\r", new(int)
+			},
+			expectedResult:   false,
+			expectedAttempts: 0,
+		},
+		{
+			inputSetup: func() (string, *int) {
+				return "http://127.0.0.1:1", new(int)
+			},
+			expectedResult:   false,
+			expectedAttempts: 0,
+		},
+		{
+			inputSetup: func() (string, *int) {
+				attempts := new(int)
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					*attempts++
+					w.WriteHeader(500)
+				}))
+				return server.URL, attempts
+			},
+			expectedResult:   false,
+			expectedAttempts: 3,
+		},
+		{
+			inputSetup: func() (string, *int) {
+				attempts := new(int)
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					*attempts++
+					if *attempts < 3 {
+						w.WriteHeader(500)
+						return
+					}
+					w.WriteHeader(200)
+				}))
+				return server.URL, attempts
+			},
+			expectedResult:   true,
+			expectedAttempts: 3,
+		},
+		{
+			inputVaultToken: "test-vault-token",
+			inputSetup: func() (string, *int) {
+				attempts := new(int)
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					*attempts++
+					require.Equal(t, "Bearer test-vault-token", r.Header.Get("Authorization"))
+					w.WriteHeader(200)
+				}))
+				return server.URL, attempts
+			},
+			expectedResult:   true,
+			expectedAttempts: 1,
+		},
+		{
+			inputSetup: func() (string, *int) {
+				attempts := new(int)
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					*attempts++
+					require.Equal(t, "", r.Header.Get("Authorization"))
+					w.WriteHeader(200)
+				}))
+				return server.URL, attempts
+			},
+			expectedResult:   true,
+			expectedAttempts: 1,
+		},
+	}
+	secretCheckRetries = 3
+	secretCheckRetryDelay = time.Millisecond
+	defer func() {
+		secretCheckRetries = 3
+		secretCheckRetryDelay = 2 * time.Second
+	}()
+
+	for _, test := range tests {
+		p := &PromCollector{vaultToken: test.inputVaultToken}
+		url, attempts := test.inputSetup()
+		result := p.secretExists(url)
+		require.Equal(t, test.expectedResult, result)
+		require.Equal(t, test.expectedAttempts, *attempts)
 	}
 }
 
