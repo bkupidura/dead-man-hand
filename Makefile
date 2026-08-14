@@ -2,12 +2,14 @@
 BINARY_NAME=dmh
 CLI_BINARY_NAME=dmh-cli
 CLI_DIR=cmd
+VERSION=dev
+LDFLAGS=-X main.version=$(VERSION)
 
 # Build the main application and CLI tool
 .PHONY: build
-build: 
+build:
 	go build -o $(BINARY_NAME) .
-	cd $(CLI_DIR) && go build -o $(CLI_BINARY_NAME) .
+	cd $(CLI_DIR) && go build -ldflags "$(LDFLAGS)" -o $(CLI_BINARY_NAME) .
 
 # Clean up binaries
 .PHONY: clean
