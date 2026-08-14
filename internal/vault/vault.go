@@ -121,6 +121,9 @@ func New(opts *Options) (VaultInterface, error) {
 		if clientData.LastSeen.After(time.Now()) {
 			return nil, fmt.Errorf("client %s has last_seen %s in the future", clientUUID, clientData.LastSeen)
 		}
+		if clientData.Secrets == nil {
+			return nil, fmt.Errorf("vault.json contains a nil secrets map for client %s", clientUUID)
+		}
 		for secretUUID, secret := range clientData.Secrets {
 			if secret == nil {
 				return nil, fmt.Errorf("vault.json contains a nil secret %s/%s", clientUUID, secretUUID)
