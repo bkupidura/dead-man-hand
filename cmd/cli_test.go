@@ -683,7 +683,7 @@ func TestGenBearer(t *testing.T) {
 func TestCreateCLI(t *testing.T) {
 	cmd := createCLI()
 	require.Equal(t, "dmh-client", cmd.Name)
-	require.Equal(t, "1.0.0", cmd.Version)
+	require.Equal(t, version, cmd.Version)
 
 	var flagNames []string
 	for _, f := range cmd.Flags {

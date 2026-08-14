@@ -209,6 +209,22 @@ func TestNew(t *testing.T) {
 				SecretProcessUnit: time.Hour,
 			},
 			expectedVault:         func() VaultInterface { return nil },
+			expectedErrorContains: "vault.json contains a nil secrets map for client testClientUUID",
+			vaultPathFunc: func() {
+				f, err := os.Create(vaultFile)
+				require.Nil(t, err)
+				defer f.Close()
+				_, err = f.WriteString(`{"testClientUUID":{"last_seen":"2025-03-26T14:55:40.119447+01:00","secrets":null}}`)
+				require.Nil(t, err)
+			},
+		},
+		{
+			inputOptions: &Options{
+				SavePath:          vaultFile,
+				Key:               "AGE-SECRET-KEY-1WCXTESPDAL64QQLNE6SEHHSFQVHZ2KV7KR2XCLGQ0UFSUUJXP5AS84HFG0",
+				SecretProcessUnit: time.Hour,
+			},
+			expectedVault:         func() VaultInterface { return nil },
 			expectedErrorContains: "client testClientUUID has last_seen 2099-01-01 00:00:00 +0000 UTC in the future",
 			vaultPathFunc: func() {
 				f, err := os.Create(vaultFile)

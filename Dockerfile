@@ -1,10 +1,12 @@
 FROM golang:1.25-alpine AS builder
 
+ARG VERSION=dev
+
 WORKDIR /src
 COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/dmh .
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/dmh-cli ./cmd
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/dmh-cli ./cmd
 
 FROM alpine:3.21
 

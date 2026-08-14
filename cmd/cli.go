@@ -21,6 +21,9 @@ import (
 
 const httpClientTimeout = 15 * time.Second
 
+// version is overridden at build time via -ldflags "-X main.version=...".
+var version = "dev"
+
 var (
 	// mocks for tests
 	newRequest  = http.NewRequest
@@ -39,7 +42,7 @@ func createCLI() *cli.Command {
 	return &cli.Command{
 		Name:    "dmh-client",
 		Usage:   "Manage dead-man-hand",
-		Version: "1.0.0",
+		Version: version,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:    "server",
